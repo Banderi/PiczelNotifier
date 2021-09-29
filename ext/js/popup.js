@@ -898,7 +898,7 @@ function toggleChildSettings() {
 	toggleSetting("markup", true, true);
 	toggleSetting("splitchatbox", true, true);
 	toggleSetting("streamer", true, true);
-	toggleSetting("oauthshow", true, true);
+	/* toggleSetting("oauthshow", true, true); */
 }
 
 function startup(callback) {
@@ -926,20 +926,20 @@ function startup(callback) {
 				recentnames = data["RECENTNAMES"];
 		});
 		
-		storage.local.get(["OAUTH"], (data) => {
+		/* storage.local.get(["OAUTH"], (data) => {
 		if(data["OAUTH"]) {
 				token = data["OAUTH"];
 				$("#oauthtoken").val(token);
 			}
-		});
+		}); */
 	});
 	
-	storage.local.get(["OAUTH"], (data) => {
+	/* storage.local.get(["OAUTH"], (data) => {
 		if(data["OAUTH"]) {
 			token = data["OAUTH"];
 			$("#oauthtoken").val(token);
 		}
-	});
+	}); */
 }
 function saveSetting(s) {
 	let obj = $("#" + s);
@@ -1024,7 +1024,7 @@ $(document).ready(function() {
 		}
 		
 		// register OAuth override box
-		$("#oauthhidden").hide();
+		/* $("#oauthhidden").hide();
 		$("#oauthshow").on("click", function() {
 			$("#oauthhidden").toggle();
 		});
@@ -1036,7 +1036,7 @@ $(document).ready(function() {
 			setTimeout(function() {
 				$("#oauthconfirm").removeClass("clicked");
 			}, 100);
-		});
+		}); */
 		
 		// register streamer mode button
 		$("#streamer").on("click", function() {
@@ -1060,7 +1060,7 @@ $(document).ready(function() {
 		});
 		
 		// register OAuth connection button
-		$(".oauth_connect").on("click", function() {
+		/* $(".oauth_connect").on("click", function() {
 			let msg = {"message" : "oauth"};
 			browser.runtime.sendMessage(msg, function(r) {
 				$(".dashboard-enabled").show();
@@ -1080,7 +1080,7 @@ $(document).ready(function() {
 			setTimeout(function() {
 				$("#oauthhidden").removeClass("clicked");
 			}, 500);
-		});
+		}); */
 		
 		// register Purge Settings button
 		$("#purge").on("click", function() {

@@ -40,7 +40,7 @@ async function update() {
 		console.log(data);
 	}); */
 	
-	await storage.sync.set({"OAUTH" : JSON.parse(localStorage["auth"])["access_token"]});
+	/* await storage.sync.set({"OAUTH" : JSON.parse(localStorage["auth"])["access_token"]}); */
 	/* console.log(localStorage);
 	console.log(JSON.parse(localStorage["auth"]));
 	console.log(JSON.parse(localStorage["auth"])["access_token"]); */

@@ -11,23 +11,33 @@ function isDevMode() {
     return !('update_url' in browser.runtime.getManifest());
 }
 
-var motd = "The final update... (?)";
+function log_message(t) {
+	if (isDevMode())
+		console.log(t);
+}
+
+var motd = "First version!";
 
 var livecount = 0;
 var invitecount = 0;
 var ownname = "";
 var exploreData = {};
+var alreadyStreaming = [];
 var notifications = 0;
 
 var notloggedinrecall = false;
 
-var token = "";
+var auth = {};
 
-var picartoClientID = "Pb5mFzEq7MMetQ8p"
-var redirectURI = "https://banderi.github.io/PicartoNotifier/redirect.html"
-var crxID = "fifjhakdmflgahkghkijipchfomdajfn"
-var picartoURL = "https://oauth.picarto.tv/authorize?redirect_uri=" + redirectURI + "&response_type=token&scope=readpub readpriv write&state=OAuth2Implicit&client_id=" + picartoClientID
-var tokenRegex = RegExp("[&#]access_token=(.+?)(?:&|$)")
+/* var picartoClientID = "Pb5mFzEq7MMetQ8p" */
+/* var redirectURI = "https://banderi.github.io/PicartoNotifier/redirect.html" */
+/* var crxID = "fifjhakdmflgahkghkijipchfomdajfn" */
+/* var picartoURL = "https://oauth.picarto.tv/authorize?redirect_uri=" + redirectURI + "&response_type=token&scope=readpub readpriv write&state=OAuth2Implicit&client_id=" + picartoClientID */
+/* var tokenRegex = RegExp("[&#]access_token=(.+?)(?:&|$)") */
+
+var apiurl = 'https://piczel.tv/api/'
+var offurl = 'https://piczel.tv/static'
+var piczelurl = "http://piczel.tv/watch/"
 
 function IsNullOrWhitespace( input ) {
   return !input || !input.trim();
@@ -39,7 +49,7 @@ async function getCookies(domains, name, callback, failure) {
 		const value = await new Promise((resolve, reject) => {
 			browser.cookies.get({"url": domains[d], "name": name}, function(cookie) {
 				if (cookie) {
-					/* console.log(cookie); */
+					// console.log(cookie);
 					resolve(cookie.value);
 				} else reject();
 			});
@@ -53,14 +63,14 @@ async function getCookies(domains, name, callback, failure) {
 	if (failure)
 		return failure(); // none of the domains matched....
 }
-function setCookie(url, name, value, callback) {
+/* function setCookie(url, name, value, callback) {
 	browser.cookies.set({"url": url, "name": name, "value": value}, function() {
 		if (callback)
 			callback();
 	});
-}
+} */
 
-function OAuthConnect(interactive = false, callback) {
+/* function OAuthConnect(interactive = false, callback) {
 	console.log("Parsing oauth...");
 	console.log("Redirect URI: " + redirectURI);
 	browser.identity.launchWebAuthFlow({'url': picartoURL,'interactive': interactive}, (redirect_url) => {
@@ -81,11 +91,11 @@ function OAuthConnect(interactive = false, callback) {
 			typeof callback === 'function' && callback();
 		}
 	});
-}
+} */
 async function getAPI(url, callback) {
 	try {
 		await $.ajax({
-			url: "https://api.picarto.tv/v1/" + url,
+			url: apiurl + url,
 			method: "GET",
 			dataType: "json",
 			crossDomain: true,
@@ -95,8 +105,6 @@ async function getAPI(url, callback) {
 				xhr.setRequestHeader("Authorization", "Bearer " + token);
 			},
 			success: function (data) {
-				/* console.log("woo!"); */
-				
 				typeof callback === 'function' && callback(data);
 			},
 			error: function (jqXHR, textStatus, errorThrown) {
@@ -109,17 +117,15 @@ async function getAPI(url, callback) {
 }
 async function postAPI(url, callback) {
 	await $.ajax({
-		url: "https://api.picarto.tv/v1/" + url,
+		url: apiurl + url,
 		method: "POST",
 		crossDomain: true,
 		contentType: "application/json; charset=utf-8",
 		cache: false,
-		beforeSend: function (xhr) {
+		/* beforeSend: function (xhr) {
 			xhr.setRequestHeader("Authorization", "Bearer " + token);
-		},
+		}, */
 		success: function (data) {
-			/* console.log("woo!"); */
-			
 			typeof callback === 'function' && callback(data);
 		},
 		error: function (jqXHR, textStatus, errorThrown) {
@@ -129,41 +135,16 @@ async function postAPI(url, callback) {
 	});
 }
 
-// download Picarto page to reload session
-function loggedintest() {
-	if (isDevMode()) {
-		console.log("Pulling Picarto page...");
-	}
-	$.ajax({
-		url: "https://picarto.tv/settings/multistream",
-		success: function(data) {
-			
-			$.post("https://picarto.tv/process/explore", {follows: true}).done(function(data) {
-				exploreData = JSON.parse(data);
-				if (exploreData[0] && exploreData[0].error == "notLoggedin") {
-					if (isDevMode()) {
-						console.log("Yup, user is not logged in!");
-					}
-					storage.local.clear();
-					storage.local.set({"USERNAME" : false});
-				}
-			});
-		},
-		error: function() {
-			console.log("Whoops. AJAX on Picarto failed!");
-		}
-	});
-	notloggedinrecall = true;
-}
-
 function notify(name, type, avatarurl) {
 	
 	if (type == "live") {
-		if (settings.notifications) {										
-			browser.notifications.create(name, {
+		if (settings.notifications) {
+			let timestamp = new Date().getTime();
+			let id = 'myid' + timestamp;
+			browser.notifications.create(id, {
 				type: "basic",
 				iconUrl: avatarurl,
-				title: "Currently streaming on Picarto:",
+				title: "Currently streaming on Piczel:",
 				message: name
 			}, function() {});
 			if (settings.alert)
@@ -177,55 +158,50 @@ function updateLive(callback) {
 	livecount = 0;
 	let cleanData = {};
 	
-	// fetch from storage and update cache
+	// get the cached list of live users and update accordingly!
 	storage.local.get("LIVE", function(items) {
 		
 		let livecache = items["LIVE"];
-	
-		// loop through cached users to update for removal
-		for (u in livecache) {
+		for (u in livecache) { // loop through cached users to update for removal
 			
+			let stream = livecache[u]; // the actual stored object
 			let name = u; // saved with key rather than index
-			let user = livecache[u]; // the actual stored object
 			
-			user["live"] = false;
+			let live = false;
 			
 			// compare with newly pulled data
 			for (i in exploreData) {
 				
 				// got a match! cache will be updated and name will be remembered
-				if (exploreData[i].channel_name && name === exploreData[i].channel_name) {
+				if (exploreData[i].user.username && name === exploreData[i].user.username) {
 					
-					exploreData[i]["old"] = true;
-					user["live"] = true;
-					
-					/* continue; */
+					/* exploreData[i]["old"] = true; */
+					live = true;
 				}
 			}
 			
 			// user no longer online
-			if (!user["live"]) {
+			if (!live) {
 				
 				// remove user from cache
 				delete livecache[u]
-				if (isDevMode())
-					console.log("User '" + name + "' no longer online (removed from cache)");
+				log_message("User '" + name + "' no longer online (removed from cache)");
 			}
 		}
 		
 		// add the remaining users and dispatch notifications
-		for (i in exploreData) {
+		for (s in exploreData) {
 			
-			let name = exploreData[i].channel_name;
-			let user = exploreData[i];
-			let avatarurl = exploreData[i].avatar;
+			let stream = exploreData[s];
 			
-			cleanData[name] = user;
+			let name = stream.username;
+			let avatarurl = stream.user.avatar.url;
+			
+			cleanData[name] = stream;
 			
 			// new user online
-			if (!user["old"]) {
-				if (isDevMode())
-					console.log(name + " just started streaming!");
+			if (!livecache || !(name in livecache)) {
+				log_message(name + " just started streaming!");
 				
 				// dispatch live notification (or not)
 				notify(name, "live", avatarurl);
@@ -376,8 +352,8 @@ function updateMOTD() {
 			if ((data["MOTD"] && data["MOTD"] != "" && data["MOTD"].split('.').slice(0,2).join(".") != version.split('.').slice(0,2).join(".")) || !data["MOTD"] || data["MOTD"] == "") {
 				browser.notifications.create("MOTD", {
 					type: "basic",
-					iconUrl: "icons/icon128.png",
-					title: "Picarto Notifier updated to " + version.toString().substr(0, 3) + "!",
+					iconUrl: "icons/icon256.png",
+					title: "Piczel Notifier updated to " + version.toString().substr(0, 3) + "!",
 					message: motd
 				}, function() {});
 			}
@@ -388,148 +364,68 @@ function updateMOTD() {
 		storage.sync.set({"MOTD" : version});
 }
 
-function scrapeConnectionsPage() { // completely broken, past code snippet only here for future potential usage
-	// get multistream data
-	$.ajax({
-		url: "https://picarto.tv/settings/connections/following",
-		success: function(data) {
-			if (isDevMode()) {
-				console.log('Scraping "Connections" page...');
-				/* console.log($(data).find('.ant-avatar-image')); */
-				console.log(data);
-			}
-			/* var ownname = $(data).find("#channelnamejs").val();
-			storage.local.set({"USERNAME":ownname}, function() {
-				//
-			}); */
-			
-			var parse;
-			parse = $(data).find('tr:contains("Live")').find('img');
-			parse.each(function(i) {
-				
-				var name = $(this).attr('alt');
-				var thumbnail = $(this).attr('src');
-				
-				exploreData[i] = {
-					"channel_name": name,
-					"thumbnail": thumbnail
-				}
-				
-				if (isDevMode()) console.log(exploreData[i]);
-			});
-			
-			updateLive(()=>{
-				/* updateAPI(()=>{ */
-					updateBadge(()=>{
-						updateMOTD(); // done!
-					})
-				/* }) */
-			})
-		},
-		error: function(data) {
-			if (isDevMode()) console.log(data); // oh no
-		}
-	});
-}
-
-function fetch_from_cookies() {
-	// first, fetch auth bearer token from cookies
-	console.log("testing for ptv_auth_perm");
-	getCookies(["https://picarto.tv", "http://picarto.tv", "https://www.picarto.tv", "http://www.picarto.tv"], "ptv_auth_perm",
+function update_from_cookies() {
+	// fetch auth data from cookies, use that to get live streams info
+	getCookies(["https://piczel.tv", "http://piczel.tv", "https://www.piczel.tv", "http://www.piczel.tv"], "authHeaders",
 		function(a) {
-			fetch_channel_data("Bearer " + (JSON.parse(a)["access_token"]));
+			let b = decodeURIComponent(a);
+			let c = JSON.parse(b);
+			/* log_message(a);
+			log_message(b);
+			log_message(c); */
+			
+			storage.sync.set({"OAUTH" : c}, function() {
+				auth = c;
+				fetch_live_users();
+			});
 		},
 		function() {
-			console.log("not found.... testing for ptv_auth");
-			getCookies(["https://picarto.tv", "http://picarto.tv", "https://www.picarto.tv", "http://www.picarto.tv"], "ptv_auth",
-				function(a) {
-					console.log("setting ptv_auth_perm!");
-					fetch_channel_data("Bearer " + (JSON.parse(a)["access_token"]));
-					setCookie("http://www.picarto.tv", "ptv_auth_perm", a);
-				}, // success callback
-				function() {
-					console.log("not found :,(");
-					storage.local.set({"ERROR" : 1});
-					return;
-					
-					// if cookie is not present, ask for new token??
-					getCookies(["https://picarto.tv", "http://picarto.tv", "https://www.picarto.tv", "http://www.picarto.tv"], "picartoCookieID", function(ptv_id) {
-						let querytosend = {
-							operationName: "generateToken",
-							query: "query generateToken($channel_id: Int!) {\n  __typename\n  generateJwtToken(channel_id: $channel_id) {\n    key\n    __typename\n  }\n}\n",
-							variables: {
-								"channel_id": ptv_id
-							}
-						}
-						$.ajax({
-							url: "https://ptvintern.picarto.tv/ptvapi",
-							type:"POST",
-							data:JSON.stringify(querytosend),
-							contentType:"application/json; charset=utf-8",
-							/* beforeSend: function (xhr) {
-								xhr.setRequestHeader('authorization', auth_bear);
-							}, */
-							dataType:"json",
-							success: function(data) {
-								let token = "Bearer " + data["data"]["generateJwtToken"]["key"];
-								fetch_channel_data(token);
-								/* setCookie("https://picarto.tv", "ptv_auth", JSON.stringify({"access_token":token}), function() {
-									fetch_channel_data(token);
-								}); */
-							},
-							error: function(data) {
-								if (isDevMode()) console.log(data); // oh no
-							}
-						});
-					});
-				}
-			)
-		} // failure callback
+			log_message("Not found.... :(");
+		}
 	);
 }
-function fetch_channel_data(auth_bear) {
+function fetch_live_users() {
 	
-	let querytosend = {
+	let auth_bear = auth["access-token"];
+	let client = auth["client"];
+	let uid = auth["uid"];
+	
+	/* let querytosend = {
 		query: "query ($first: Int!, $page: Int!, $q: String) {\n  following(first: $first, page: $page, q: $q, orderBy: {field: \"last_live\", order: DESC}) {\n    account_type\n    avatar\n    channel_name\n    id\n    last_live\n    online\n    __typename\n  }\n}\n",
 		variables: {
 			"first": settings.maxnames,
 			"page": 1,
 			"q": ""
 		}
-	}
+	} */
 	
 	$.ajax({
-		url: "https://ptvintern.picarto.tv/ptvapi",
-		type:"POST",
-		data:JSON.stringify(querytosend),
-		contentType:"application/json; charset=utf-8",
+		url: 'https://piczel.tv/api/streams?followedStreams=true&live_only=true&sfw=false',
+		method: "GET",
+		dataType: "json",
+		crossDomain: true,
+		contentType: "application/json; charset=utf-8",
+		cache: false,
 		beforeSend: function (xhr) {
-			xhr.setRequestHeader('authorization', auth_bear);
+			xhr.setRequestHeader('access-token', auth_bear);
+			xhr.setRequestHeader('Client', client);
+			xhr.setRequestHeader('uid', uid);
 		},
-		dataType:"json",
 		success: function(data) {
 			
-			if (!data["data"]) {
-				console.log("ERROR: " + data["errors"][0]["errorDescription"]);
-				return;
-			}
+			exploreData = [];
 			
-			var parse = data["data"]["following"];
-			
-			for (i in parse) {
-				if (parse[i]["online"] == false) {
-					delete parse[i];
+			for (s in data) {
+				let stream = data[s];
+				if (!stream.live || !stream.following.value)
 					continue;
-				}
+				else
+					exploreData.push(stream);
 			}
 			
-			if (isDevMode()) {
-				/* console.log('Scraping "Connections" page...'); */
-				/* console.log($(data).find('.ant-avatar-image')); */
-				console.log(parse);
-			}
-			
-			exploreData = parse;
+			/* log_message('Scraping "Connections" page...'); */
+			/* log_message($(data).find('.ant-avatar-image')); */
+			/* log_message(exploreData); */
 			
 			updateLive(()=>{
 				/* updateAPI(()=>{ */
@@ -540,7 +436,7 @@ function fetch_channel_data(auth_bear) {
 			})
 		},
 		error: function(data) {
-			if (isDevMode()) console.log(data); // oh no
+			log_message(data); // oh no
 		}
 	});
 }
@@ -568,10 +464,19 @@ var updater = null;
 function update() {
 	storage.local.set({"ERROR" : 0});
 	
-	storage.sync.get("OAUTH", (v) => {
-		token = v["OAUTH"];
-		fetch_channel_data("Bearer " + token);
-	});
+	if (auth != {}) { // no auth structure in cache (global var)
+		storage.sync.get("OAUTH", (data) => {
+			if (data["OAUTH"]) { // get from local storage
+				auth = data["OAUTH"];
+				fetch_live_users();
+			} else {
+				log_message("No saved auth data found!! Fetching from cookies...");
+				update_from_cookies();
+			}
+		});
+	} else {
+		fetch_live_users();
+	}
 	
 	updater = setTimeout(update, settings.updateinterval * 1000);
 }
@@ -582,17 +487,13 @@ function startup() {
 			let setting = data["SETTINGS"][a];
 			settings[a] = setting;
 		}
-		storage.sync.get(["OAUTH"], (data) => {
-			if (data["OAUTH"])
-				token = data["OAUTH"];
-			
-			// set notif volume
-			ding.volume = parseFloat(settings.dingvolume) / 100;
-			
-			// start the update!
-			if (!updater)
-				update();
-		});
+		
+		// set notif volume
+		ding.volume = parseFloat(settings.dingvolume) / 100;
+		
+		// start the update!
+		if (!updater)
+			update();
 	});
 }
 
