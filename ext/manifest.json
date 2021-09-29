@@ -1,0 +1,53 @@
+{
+	"name": "Picarto Notifier",
+	"version": "2.5.1",
+	"manifest_version": 2,
+	"permissions": [
+		"*://*.picarto.tv/*",
+		"storage",
+		"notifications",
+		"identity",
+		"cookies"
+	],
+	"description": "An unofficial notifier for Picarto.",
+	"icons": 
+	{
+		"16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+		"96": "icons/icon96.png",
+        "128": "icons/icon128.png",
+		"256": "icons/icon256.png"
+	},
+	"web_accessible_resources": [
+		"defaults.json"
+	],
+	"background":
+	{
+		"page": "global.html"
+	},
+	"content_scripts": 
+	[ {
+		"permissions": [
+			"storage"
+		],
+		"matches": [
+			"http://picarto.tv/*",
+			"https://picarto.tv/*",
+			"http://www.picarto.tv/*",
+			"https://www.picarto.tv/*"
+		],
+		"js": [ "js/jquery.min.js", "js/hidebar.js" ],
+		"run_at" : "document_start"
+	} ],
+	"browser_action":
+	{
+		"default_icon": "icons/icon128.png",
+		"default_popup": "popup.html"
+	},
+	"applications": {
+		"gecko": {
+			"id": "myextension@mydomain.com",
+			"strict_min_version": "42.0"
+		}
+	}
+}
