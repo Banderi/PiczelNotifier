@@ -26,14 +26,9 @@ var alreadyStreaming = [];
 var notifications = 0;
 
 var notloggedinrecall = false;
+var next_error = 0;
 
 var auth = {};
-
-/* var picartoClientID = "Pb5mFzEq7MMetQ8p" */
-/* var redirectURI = "https://banderi.github.io/PicartoNotifier/redirect.html" */
-/* var crxID = "fifjhakdmflgahkghkijipchfomdajfn" */
-/* var picartoURL = "https://oauth.picarto.tv/authorize?redirect_uri=" + redirectURI + "&response_type=token&scope=readpub readpriv write&state=OAuth2Implicit&client_id=" + picartoClientID */
-/* var tokenRegex = RegExp("[&#]access_token=(.+?)(?:&|$)") */
 
 var apiurl = 'https://piczel.tv/api/'
 var offurl = 'https://piczel.tv/static'
@@ -70,28 +65,6 @@ async function getCookies(domains, name, callback, failure) {
 	});
 } */
 
-/* function OAuthConnect(interactive = false, callback) {
-	console.log("Parsing oauth...");
-	console.log("Redirect URI: " + redirectURI);
-	browser.identity.launchWebAuthFlow({'url': picartoURL,'interactive': interactive}, (redirect_url) => {
-		let parsed = tokenRegex.exec(redirect_url);
-		console.log("Redirect received! Parsing...");
-		if (parsed) {
-			console.log("Logged in!");
-			token = parsed[1];
-			storage.local.set({"OAUTH" : token});
-			
-			typeof callback === 'function' && callback();
-		} else {
-			token = "";
-			console.group("OAuth2 Failed:");
-			console.log(redirect_url);
-			console.log(parsed);
-			console.groupEnd();
-			typeof callback === 'function' && callback();
-		}
-	});
-} */
 async function getAPI(url, callback) {
 	try {
 		await $.ajax({
@@ -140,7 +113,7 @@ function notify(name, type, avatarurl) {
 	if (type == "live") {
 		if (settings.notifications) {
 			let timestamp = new Date().getTime();
-			let id = 'myid' + timestamp;
+			let id = name + '__@@' + timestamp;
 			browser.notifications.create(id, {
 				type: "basic",
 				iconUrl: avatarurl,
@@ -193,7 +166,6 @@ function updateLive(callback) {
 		for (s in exploreData) {
 			
 			let stream = exploreData[s];
-			
 			let name = stream.username;
 			let avatarurl = stream.user.avatar.url;
 			
@@ -247,14 +219,14 @@ function updateAPI(callback) {
 						storage.local.set({"API_NOTIFICATIONS" : c});
 						
 						// automatically remove notifications if setting is enabled
-						if (settings.picartobar && c && c[0]) {
+						/* if (settings.picartobar && c && c[0]) {
 							for (n in c) {
 								postAPI("user/notifications/" + c[n]["uuid"] + "/delete");
 							}
 							c = {};
 							storage.local.set({"API_NOTIFICATIONS" : c});
 							notifications = 0;
-						}
+						} */
 						
 					});
 				}
@@ -341,8 +313,6 @@ function updateBadge(callback) {
 		}
 	}
 	
-	
-	
 	typeof callback === 'function' && callback();
 }
 function updateMOTD() {
@@ -364,15 +334,22 @@ function updateMOTD() {
 		storage.sync.set({"MOTD" : version});
 }
 
+function updateCounters() {
+	updateLive(()=>{
+		/* updateAPI(()=>{ */
+			updateBadge(()=>{
+				updateMOTD(); // done!
+			})
+		/* }) */
+	})
+}
+
 function update_from_cookies() {
 	// fetch auth data from cookies, use that to get live streams info
 	getCookies(["https://piczel.tv", "http://piczel.tv", "https://www.piczel.tv", "http://www.piczel.tv"], "authHeaders",
 		function(a) {
 			let b = decodeURIComponent(a);
 			let c = JSON.parse(b);
-			/* log_message(a);
-			log_message(b);
-			log_message(c); */
 			
 			storage.sync.set({"OAUTH" : c}, function() {
 				auth = c;
@@ -380,7 +357,9 @@ function update_from_cookies() {
 			});
 		},
 		function() {
-			log_message("Not found.... :(");
+			log_message("No auth field found... Not logged in?!");
+			next_error = 2;
+			updateCounters(); // update badge and live count without fetching from Piczel...
 		}
 	);
 }
@@ -389,15 +368,6 @@ function fetch_live_users() {
 	let auth_bear = auth["access-token"];
 	let client = auth["client"];
 	let uid = auth["uid"];
-	
-	/* let querytosend = {
-		query: "query ($first: Int!, $page: Int!, $q: String) {\n  following(first: $first, page: $page, q: $q, orderBy: {field: \"last_live\", order: DESC}) {\n    account_type\n    avatar\n    channel_name\n    id\n    last_live\n    online\n    __typename\n  }\n}\n",
-		variables: {
-			"first": settings.maxnames,
-			"page": 1,
-			"q": ""
-		}
-	} */
 	
 	$.ajax({
 		url: 'https://piczel.tv/api/streams?followedStreams=true&live_only=true&sfw=false',
@@ -411,29 +381,26 @@ function fetch_live_users() {
 			xhr.setRequestHeader('Client', client);
 			xhr.setRequestHeader('uid', uid);
 		},
-		success: function(data) {
+		success: function(data, status, xhr) {
 			
 			exploreData = [];
+
+			let logged_in = true;
+			if (!data[0].following)
+				logged_in = false;
 			
-			for (s in data) {
-				let stream = data[s];
-				if (!stream.live || !stream.following.value)
-					continue;
-				else
-					exploreData.push(stream);
-			}
+			if (logged_in) {
+				for (s in data) {
+					let stream = data[s];
+					if (!stream.live || !stream.following.value)
+						continue;
+					else
+						exploreData.push(stream);
+				}
+			} else
+			    next_error = 2; // not logged in?!??
 			
-			/* log_message('Scraping "Connections" page...'); */
-			/* log_message($(data).find('.ant-avatar-image')); */
-			/* log_message(exploreData); */
-			
-			updateLive(()=>{
-				/* updateAPI(()=>{ */
-					updateBadge(()=>{
-						updateMOTD(); // done!
-					})
-				/* }) */
-			})
+			updateCounters();
 		},
 		error: function(data) {
 			log_message(data); // oh no
@@ -462,21 +429,11 @@ var updater = null;
 
 // main update function
 function update() {
-	storage.local.set({"ERROR" : 0});
 	
-	if (auth != {}) { // no auth structure in cache (global var)
-		storage.sync.get("OAUTH", (data) => {
-			if (data["OAUTH"]) { // get from local storage
-				auth = data["OAUTH"];
-				fetch_live_users();
-			} else {
-				log_message("No saved auth data found!! Fetching from cookies...");
-				update_from_cookies();
-			}
-		});
-	} else {
-		fetch_live_users();
-	}
+	update_from_cookies(); // always use the field from the cookies directly
+	
+	storage.local.set({"ERROR" : next_error});
+	next_error = 0;
 	
 	updater = setTimeout(update, settings.updateinterval * 1000);
 }
@@ -508,10 +465,9 @@ var ding = new Audio('audio/ding.ogg');
 // add listener to the desktop notification popups
 browser.notifications.onClicked.addListener(function(notificationId) {
 	if (notificationId !== "MOTD") {
-		if (isDevMode()) {
-			console.log("Notification clicked! ID: " + notificationId);
-		}
-		window.open('https://picarto.tv/' + notificationId, '_blank');
+		log_message("Notification clicked! ID: " + notificationId);
+	
+		window.open('https://piczel.tv/watch/' + notificationId.substr(0, notificationId.indexOf('__@@')), '_blank');
 		browser.notifications.clear(notificationId, function() {});
 	}
 });

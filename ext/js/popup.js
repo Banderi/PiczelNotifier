@@ -8,6 +8,11 @@ function isDevMode() {
     return !('update_url' in browser.runtime.getManifest());
 }
 
+function log_message(t) {
+	if (isDevMode())
+		console.log(t);
+}
+
 var notificationMsgs = [];
 notificationMsgs[1] = "Please login or register to follow.";
 notificationMsgs[2] = "You can not follow yourself.";
@@ -58,23 +63,19 @@ notificationMsgs[74] = "You can not start multistream sessions with a free accou
 
 // display debug messages, errors and info
 function displayNotificationMsg(id) {
-	if (isDevMode()) {
-		console.log(notificationMsgs[id]);
-	}
+	log_message(notificationMsgs[id]);
 	$("#msgbox").text(notificationMsgs[id]);
 	$("#msgbox").parent().clearQueue().stop().fadeIn(100).delay(1000).fadeOut();
 }
 function displayErrorMsg(id) {
-	if (isDevMode()) {
-		console.log("Whoops, that's an internal error. ID: " + id);
-	}
+	log_message("Whoops, that's an internal error. ID: " + id);
 	$("#msgbox").text("Picarto internal error: " + id);
 	$("#msgbox").parent().clearQueue().stop().fadeIn(100).delay(1000).fadeOut();
 }
 
 // open streaming page from popup link
 function openStreamer(name) {
-	window.open('https://picarto.tv/' + name, '_blank');
+	window.open('https://piczel.tv/watch/' + name, '_blank');
 	notifications.clear(name, function() {});
 	window.close();
 }
@@ -100,8 +101,6 @@ var token = "";
 var livecache = {};
 var multicache = {};
 var usercache = {};
-var notifcache = {};
-var recordcache = {};
 
 var ownname = "";
 
@@ -209,52 +208,6 @@ function appendMultiCard(name, thumb, id, type) {
 		);
 	}
 }
-function appendNotificationCard(name, thumb, uuid, timestamp, type) {
-	$('#con_notifications').prepend(
-		$('<div/>', {'class': 'conn_notification'}).append(
-			$('<div/>', {'class': 'conn_streamer_head'}).append(
-				$('<div/>', {'class': 'col notif'}).append(
-					$('<img/>', {'class': 'conn_avatar'}).attr("src", thumb)
-				)
-			)
-		)
-	);
-	
-	let card = $(".col.notif").first();
-	let msg = "";
-	
-	// live notification
-	if (type == "live")
-		msg = " is now live";
-	else if (type == "multiInvite")
-		msg = " invited you";
-	else if (type == "multiAccept")
-		msg = " accepted your invite";
-	else if (type == "multiLeave")
-		msg = " left your multistream";
-	else if (type == "multiRemove")
-		msg = " has revoked your invite";
-	else if (type == "recordingCreate")
-		msg = " created a new recording";
-	else if (type == "follow")
-		msg = " followed you";
-	
-	let d = new Date(timestamp);
-	
-	card.append(
-		$('<span/>', {'class': 'conn_user notif', text: msg}).prepend(
-			$('<span/>', {'class': 'conn_user notif name', text: name})
-		)
-	)
-	.append(
-		$('<span/>', {'class': 'conn_user timestamp', text: d.toLocaleString()})
-	)
-	.append(
-		$('<span/>', {'class': 'ms_button ms_read', 'title': 'Mark as read', 'value': uuid}).append(
-			$('<i/>', {'class': 'icon'}).html('&#xe813;')
-		)
-	);
-}
 
 function updateLive(callback) {
 	storage.local.get("LIVE", function(items) {
@@ -271,18 +224,16 @@ function updateLive(callback) {
 			// loop through cached users
 			for (u in livecache) {
 				
-				let name = u;
-				let user = livecache[u];
-				let thumb = user["avatar"];
+				let stream = livecache[u];
+				let name = stream.username;
+				let thumb = stream.user.avatar.url;
 				
 				var found = jQuery.inArray(name, recentnames);
 				if (found >= 0) {
 					// name already present
-				} else {
+				} else
 					recentnames.push(name);
-				}
 				storage.sync.set({"RECENTNAMES" : recentnames});
-				
 				
 				// add link to the window				
 				appendLiveLink(name, thumb);
@@ -374,99 +325,6 @@ function updateMulti(callback) {
 		}
 		
 		typeof callback === 'function' && callback();
-	});
-}
-function updateNotifications() {
-	
-	if (settings.picartobar && notifcache[0]) {
-		for (n in notifcache) {
-			postAPI("user/notifications/" + notifcache[n]["uuid"] + "/delete");
-		}
-		notifcache = {};
-		storage.local.set({"API_NOTIFICATIONS" : notifcache});
-		$('#con_notifications').empty();
-		let cachestamp = Date.now();
-		browser.storage.local.set({"CACHESTAMP" : cachestamp});
-	}
-	
-	storage.local.get("API_NOTIFICATIONS", function(items) {
-		
-		// cache didn't change, so don't kill the DOM
-		if (!items["API_NOTIFICATIONS"] || JSON.stringify(notifcache) === JSON.stringify(items["API_NOTIFICATIONS"])) {
-			return;
-		}
-		
-		$('#con_notifications').empty();
-		
-		notifcache = items["API_NOTIFICATIONS"];
-		
-		for (i in notifcache) {
-			if (notifcache[i]["unread"] == true || true) {
-				let name = notifcache[i]["channel"];
-				let uuid = notifcache[i]["uuid"];
-				let timestamp = notifcache[i]["timestamp"];
-				let type = notifcache[i]["type"];
-				let thumb = notifcache[i]["avatar"];
-				appendNotificationCard(name, thumb, uuid, timestamp, type);
-			}
-		}
-		
-		// register notifications read buttons
-		$('.ms_read').each(function() {
-			let inv = $(this);
-			let id = $(this).attr('value');
-			$(this).off().on('click', function() {
-				postAPI("user/notifications/" + id + "/delete", function(data) {
-					inv.parent().parent().parent().remove();
-					
-					var obj = notifcache.find(function (obj) { return obj.uuid === id; });
-					var i = notifcache.indexOf(obj);
-					if (i !== -1)
-						notifcache.splice(i, 1);
-					
-					let cachestamp = Date.now();
-					browser.storage.local.set({"CACHESTAMP" : cachestamp});
-					storage.local.set({"API_NOTIFICATIONS" : notifcache});
-					
-					if (notifcache[0]) {
-						$('#notif_badge').show();
-						$('#notif_badge').text(notifcache.length);
-					}
-					else
-						$('#notif_badge').hide();
-					
-					let msg = {"message" : "notificationRemoved"};
-					browser.runtime.sendMessage(msg);
-				});
-			}).on('mouseover', function() {
-				$(this).parent().parent().parent().css("background-color", "rgba(116, 57, 52, 0.95)")
-			}).on('mouseout', function() {
-				$(this).parent().parent().parent().css("background-color", "#5b616c")
-			});
-		});
-		
-		if (notifcache[0]) {
-			$('#notif_badge').show();
-			$('#notif_badge').text(notifcache.length);
-		}
-		else
-			$('#notif_badge').hide();
-	});
-}
-function updateRecordings() {
-	storage.local.get("API_RECORDINGS", function(items) {
-		
-		// cache didn't change, so don't kill the DOM
-		if (!items["API_RECORDINGS"] || JSON.stringify(recordcache) === JSON.stringify(items["API_RECORDINGS"])) {
-			return;
-		}
-		
-		$('#con_recordings').empty();
-		
-		recordcache = items["API_RECORDINGS"];
-		
-		
-		
 	});
 }
 
@@ -601,7 +459,7 @@ function updateDashboard(c = false) {
 }
 
 function updateAdvanced() {
-	if (!settings.streamer || true) { // temp: no streamer mode
+	if (!settings.streamer) { // temp: no streamer mode
 		$("#advanced").hide();
 		$(".ms_inv").hide();
 	} else {
@@ -833,7 +691,8 @@ function update() {
 				$('#con_headings').text("Token expired!\nLog into any channel to refresh.");
 				break;
 			case 2:
-				$('#con_headings').text("User not logged in! Please log in to Picarto.tv to use this.");
+				$('#con_headings').text("User not logged in!\nPlease log in to Piczel.tv to use this.");
+				break;
 			default:
 				$('#con_headings').text("Uknown error: " + err);
 				break;
@@ -897,7 +756,7 @@ function toggleChildSettings() {
 	toggleSetting("expandstrm", true, true);
 	toggleSetting("markup", true, true);
 	toggleSetting("splitchatbox", true, true);
-	toggleSetting("streamer", true, true);
+	/* toggleSetting("streamer", true, true); */
 	/* toggleSetting("oauthshow", true, true); */
 }
 
@@ -1040,7 +899,7 @@ $(document).ready(function() {
 		
 		// register streamer mode button
 		$("#streamer").on("click", function() {
-			saveSetting("streamer");
+			//saveSetting("streamer");
 			updateAdvanced();
 		});
 		updateAdvanced();
@@ -1111,8 +970,6 @@ $(document).ready(function() {
 		var manifestData = browser.runtime.getManifest();
 		$("#version").text("ver " + manifestData.version);
 		
-		
-		
 		startup();
 		if (isDevMode()) {
 			console.log("STARTUP!");
@@ -1122,19 +979,3 @@ $(document).ready(function() {
 		var updater = setInterval(update, 1000);
 	});
 });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

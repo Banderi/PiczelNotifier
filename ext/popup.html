@@ -11,17 +11,17 @@
 	<link rel="stylesheet" type="text/css" href="css/popup.css">
 </head>
 <body>
-	<div class="sidebar">
+	<div class="sidebar" style="min-height: 150">
 		<div class="side_btn t_main" id="t_main">
 			<img src="graphics/live.png" class="side_icon">
 		</div>
-		<div class="side_btn t_notifications disabled error" id="t_notifications">
+		<!-- <div class="side_btn t_notifications disabled error" id="t_notifications">
 			<img src="graphics/notifications.png" class="side_icon">
 		</div>
-			<div id="notif_badge">25</div>
-		<div class="side_btn t_recordings disabled error" id="t_recordings">
+		<div id="notif_badge">25</div> -->
+		<!-- <div class="side_btn t_recordings disabled error" id="t_recordings">
 			<img src="graphics/recordings.png" class="side_icon">
-		</div>
+		</div> -->
 		<div class="side_btn t_settings" id="t_settings">
 			<img src="graphics/settings.png" class="side_icon">
 		</div>
@@ -44,7 +44,7 @@
 				
 				<div id="advanced">
 					<div class="dashboard-enabled dashboard_pad">
-						<div class="con_dashboard"><span style="display: none;">Picarto Stream Dashboard 1.05</span>
+						<div class="con_dashboard"><span style="display: none;">Piczel Stream Dashboard 0.1</span>
 							<span class="chan_mode" title="Toggle commissions" id="commissions"><i class="icon">&#xe88e;</i></span>
 							<span class="chan_mode" title="Toggle NSFW" id="nsfw"><i class="icon">&#xe800;</i></span>
 							<span class="chan_mode" title="Toggle Gamemode" id="gamemode"><i class="icon">&#xe834;</i></span>
@@ -65,16 +65,16 @@
 					</div>
 					
 					<div class="dashboard-disabled">
-						<span class="oauth-warning">You need to connect OAuth on your Picarto page to be able to use the dashboard features.</span>
-						<button class="longbutton oauth_connect">Generate OAuth token</button>
-						<button class="longbutton yellow oauth_manual">Add a token manually</button>
+						<span class="oauth-warning">You need to be logged in to Piczel.TV to use the streaming dashboard!</span>
+						<!-- <button class="longbutton oauth_connect">Generate OAuth token</button>
+						<button class="longbutton yellow oauth_manual">Add a token manually</button> -->
 					</div>
 					
 				</div>
 			</div>
 		</div>
 		
-		<div class="tab t_notifications" id="t_notifications">
+		<!-- <div class="tab t_notifications" id="t_notifications">
 			<div class="submain heading streaming">Notifications</div>
 			<div class="dashboard-disabled">
 				<span class="oauth-warning">You need to connect OAuth on your Picarto page to be able to use the dashboard features.</span>
@@ -87,9 +87,9 @@
 				</span>
 				<div id="con_notifications"></div>
 			</div>
-		</div>
+		</div> -->
 		
-		<div class="tab t_recordings" id="t_recordings">
+		<!-- <div class="tab t_recordings" id="t_recordings">
 			<div class="submain heading streaming">Recordings<br><span class="setting_subtext"> Eventually....</span></div>
 			<div class="dashboard-disabled">
 				<span class="oauth-warning">You need to connect OAuth on your Picarto page to be able to use the dashboard features.</span>
@@ -98,7 +98,7 @@
 			</div>
 			<div class="dashboard-enabled" id="con_recordings">
 			</div>
-		</div>
+		</div> -->
 		
 		<div class="tab t_settings" id="t_settings">
 			
@@ -106,7 +106,7 @@
 				<!-- <div class="submain heading streaming">Settings</div> -->
 				<div class="setting">
 					<input type="number" name="updateinterval" class="numberbox" id="updateinterval" value="5" min="5" max="3600" step="1"><span class="setting_text">Primary refresh interval</span>
-					<span class="setting_subtext">How frequently the app refreshes and polls Picarto's endpoints, in seconds</span>
+					<span class="setting_subtext">How frequently the app refreshes and polls Piczel's endpoints, in seconds</span>
 				</div>
 				<div class="setting">
 					<input type="checkbox" class="checkslider" id="notifications"><span class="setting_text">Desktop notifications</span>
@@ -120,14 +120,14 @@
 					<input type="number" name="dingvolume" class="numberbox" id="dingvolume" value="100" min="0" max="100" step="1"><span class="setting_text">Sound notification volume</span>
 					<span class="setting_subtext"></span>
 				</div>
-				<div class="setting">
+				<!-- <div class="setting">
 					<input type="checkbox" class="checkslider" id="picartobar"><span class="setting_text">Disable native notifications</span>
 					<span class="setting_subtext">Automatically hide all native Picarto notifications</span>
-				</div>
-				<div class="setting">
+				</div> -->
+				<!-- <div class="setting">
 					<input type="checkbox" class="checkslider" id="badgenotif"><span class="setting_text">Use notifications natively</span>
 					<span class="setting_subtext">Set badge to show unread notifications and default popup to the Notifications panel</span>
-				</div>
+				</div> -->
 				<div class="setting">
 					<input type="checkbox" class="checkslider" id="updatemsg"><span class="setting_text">Receive update notifications</span>
 					<span class="setting_subtext">Receive update alerts mentioning new features in the form of a desktop notification</span>
@@ -137,13 +137,13 @@
 					<span class="setting_subtext">Use Chrome's synchronized extension storage for settings across devices</span>
 				</div> -->
 				
-				<div class="setting">
+				<!-- <div class="setting">
 					<input type="checkbox" class="checkslider" id="oauthshow"><span class="setting_text">Show OAuth token</span>
 					<div id="oauthhidden" class="input-group oauthtoken">
 						<input type="textbox" class="form-control nooutline" id="oauthtoken" spellcheck="false"><span class="input-group-addon btnBase Dark displayCell oauthtoken" id="oauthconfirm">Save</button>
 					</div>
 					<span class="setting_subtext">Manually edit or clear the OAuth token</span>
-				</div>
+				</div> -->
 
 				<div class="setting">
 					<input type="text" name="badgecolor" class="colortext" id="badgecolor" value="#33aa33"><span class="setting_text">Notification Badge color</span>
@@ -165,7 +165,7 @@
 			
 			<div class="submain">
 				<div class="submain heading streaming">Hacks/fixes</div>
-				<div class="setting">
+				<!-- <div class="setting">
 					<input type="checkbox" class="checkslider" id="markup"><span class="setting_text">Enable chat markup</span>
 					<span class="setting_subtext">Inject Markdown markup (italics, bold, underlined, etc.) in Picarto chats</span>
 				</div>
@@ -188,41 +188,24 @@
 				<div class="setting">
 					<input type="checkbox" class="checkslider" id="csstweaks"><span class="setting_text">CSS Tweaks</span>
 					<span class="setting_subtext">Fix some design issues and other minor visual tweaks</span>
-				</div>
+				</div> -->
 			</div>
 			
 		</div>
 		
-		
 		<div class="tab t_about" id="t_about">
-			<div class="submain heading streaming">Unofficial Picarto Notifier<br><span class="setting_subtext" id="version"></span></div>
+			<div class="submain heading streaming">Unofficial Piczel Notifier<br><span class="setting_subtext" id="version"></span></div>
 			<div class="submain">
 			</div>
 			<div class="submain">
 				<div class="setting_subtext about">
-					Unofficial real-time notifier for Picarto.TV streaming service.
+					Unofficial real-time notifier for Piczel.TV streaming service.
 					<br><br>					
 					Main framework by Banderi/Federico Barlotti (2018) with help from <strong>Github.com/Clarvel</strong><br>
 					Color picker library by <strong>Github.com/laktek</strong><br>
 					Autocomplete library by <strong>Github.com/10w042</strong>
 					<!-- <br><br> -->
 					<!-- All copyrighted themes, styles, scripts and graphics are (c) Picarto.TV -->
-					<br><br>
-					<span class="about_notice">
-					<strong>
-					4/8/2021<br>
-					Due to Picarto's latest update in February some settings - marked as red - are currently broken, unfinished, impossible to implement, or all of the above.<br>
-					Although I wish I could dedicate more time over these, I can not promise this will ever be done.
-					I have been disenchanted and saddened by the current state, the management and the unwillingness to pay heed to feedback that the staff of Picarto.tv has demonstrated,
-					particularly after these last few, disastrous, updates.<br>
-					<!-- I have been disenchanted by the service and have stopped supporting it, and will therefore be unable to test and fix Premium-related features like multistream invites.<br> -->
-					If anyone wishes to contribute to future fixes or try their hand at these, I will most happily accept PRs on the <a href="https://github.com/Banderi/PicartoNotifier">project repo</a>.
-					<br><br>
-					Thank you all for your amazing support over the years,
-					I hope I've been able to provide at the very least some level of improvement over the user experience and overall usability of the service.<br>
-					<span style="display: block;text-align:right;padding-right: 10px;">- Federico Barlotti</span>
-					</strong>
-					</span>
 				</div>
 			</div>
 		</div>
