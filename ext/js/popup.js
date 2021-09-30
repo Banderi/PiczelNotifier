@@ -264,44 +264,47 @@ function updateLive(callback) {
 	});
 }
 function updateMulti(callback) {
-	storage.local.get("API_MULTISTREAM", function(items) {
+	storage.local.get("MULTISTREAM", function(items) {
 		
 		// cache didn't change, so don't kill the DOM
-		if (!items["API_MULTISTREAM"] || items["API_MULTISTREAM"] == "" || JSON.stringify(multicache) === JSON.stringify(items["API_MULTISTREAM"])) {
+		if (!items["MULTISTREAM"] || items["MULTISTREAM"] == "" || JSON.stringify(multicache) === JSON.stringify(items["MULTISTREAM"])) {
 			typeof callback === 'function' && callback();
 			return;
 		}
 		
 		$('#ms_invites').empty();
 		
-		multicache = items["API_MULTISTREAM"];
+		multicache = items["MULTISTREAM"];
 		
 		let m = multicache;
-		if (m["incoming"][0] || m["outgoing"][0] || m["session"]["guests"][0]) {
+		if (m["received"][0] || m["sent"][0] || m["session"]["guests"][0]) {
 			multistream = true;
 			
 			let newnames = [];
 			
-			for (i in m["incoming"]) {
-				let o = m["incoming"][i];
-				let name = o["name"];
-				let thumb = o["avatar"];
-				appendMultiCard(name, thumb, o["user_id"], "incoming");
+			for (i in m["received"]) {
+				let o = m["received"][i];
+				let name = o.host_stream.slug;
+				let thumb = 'https://piczel.tv/api/avatars/' + name;
+				if (!o.accepted)
+					appendMultiCard(name, thumb, o.host_stream.id, "incoming"); // received invite
+				else
+					appendMultiCard(name, thumb, o.host_stream.id, "host");
 				newnames.push(name);
 			}
-			for (i in m["outgoing"]) {
-				let o = m["outgoing"][i];
-				let name = o["name"];
-				let thumb = o["avatar"];
-				appendMultiCard(name, thumb, o["user_id"], "outgoing");
+			for (i in m["sent"]) {
+				let o = m["sent"][i];
+				let name = o.target_stream.slug;
+				let thumb = 'https://piczel.tv/api/avatars/' + name;
+				appendMultiCard(name, thumb, o.target_stream.id, "outgoing"); // sent invite
 				newnames.push(name);
 			}
-			if (m["session"]["host"]["name"] == ownname)
+			/* if (m["session"]["host"]["name"] == ownname)
 				for (i in m["session"]["guests"]) {
 					let o = m["session"]["guests"][i];
 					let name = o["name"];
-				let thumb = o["avatar"];
-					appendMultiCard(name, thumb, o["user_id"], "guest");
+					let thumb = o["avatar"];
+					appendMultiCard(name, thumb, o["user_id"], "guest"); 
 					newnames.push(name);
 				}
 			if (m["session"]["host"] && m["session"]["host"]["name"] != ownname && m["session"]["active"] == true) {
@@ -310,7 +313,7 @@ function updateMulti(callback) {
 				let thumb = o["avatar"];
 				appendMultiCard(name, thumb, o["user_id"], "host");
 				newnames.push(name);
-			}
+			} */
 			
 			for (i in newnames) {
 				let name = newnames[i];
@@ -328,150 +331,20 @@ function updateMulti(callback) {
 	});
 }
 
-function setGameMode(value) {
-	$.post("https://picarto.tv/process/dashboard", {setGameMode: value}, function(data) {
-		if (data == "gameModeOk") {
-			let dashboard = usercache["channel_details"];
-			
-			if (value == 1) {
-				dashboard["gaming"] = true;
-			} else {
-				dashboard["gaming"] = false;
-			}
-			usercache["channel_details"] = dashboard;
-			browser.storage.local.set({"API_USER" : usercache}, function() {
-				updateDashboard(true);
-			});
-		} else if (data == "gameModeFail") {
-			displayErrorMsg(102)
-		} else if (data == "notAllowed") {
-			displayNotificationMsg(5)
-		}
-	})
-}
-function setNsfw(value) {
-	$.post("https://picarto.tv/process/dashboard", {setNsfw: value}, function(data) {
-		if (data == "nsfwOk") {
-			let dashboard = usercache["channel_details"];
-			
-			if (value == 1) {
-				dashboard["adult"] = true;
-			} else {
-				dashboard["adult"] = false;
-			}
-			usercache["channel_details"] = dashboard;
-			browser.storage.local.set({"API_USER" : usercache}, function() {
-				updateDashboard(true);
-			});
-		} else if (data == "nsfwFail") {
-			displayErrorMsg(103)
-		} else if (data == "notAllowed") {
-			displayNotificationMsg(5)
-		} else if (data == "nsfwCategorySet") {
-			displayNotificationMsg(36)
-		}
-	})
-}
-function setCommissionMode(value) {
-	$.post("https://picarto.tv/process/dashboard", {setCommission: value}, function(data) {
-		if (data == "commissionModeOk") {
-			let dashboard = usercache["channel_details"];
-			
-			if (value == 1) {
-				dashboard["commissions"] = true;
-			} else {
-				dashboard["commissions"] = false;
-			}
-			usercache["channel_details"] = dashboard;
-			browser.storage.local.set({"API_USER" : usercache}, function() {
-				updateDashboard(true);
-			});
-		} else if (data == "commissionModeFail") {
-			displayErrorMsg(104)
-		} else if (data == "notAllowed") {
-			displayNotificationMsg(5)
-		}
-	})
-}
-function updateDashboard(c = false) {
-	storage.local.get("API_USER", function(items) {
-		
-		if (!items["API_USER"]) {
-			return;
-		}
-		
-		if (c) {
-			let cachestamp = Date.now();
-			browser.storage.local.set({"CACHESTAMP" : cachestamp});
-		}
-		
-		usercache = items["API_USER"];
-		dashboard = usercache["channel_details"];
-		
-		if (dashboard) {
-			if (dashboard["gaming"] == true) {
-				$("#gamemode").addClass("on").off().on('click', function() {
-					$("#gamemode").addClass("disabled").off();
-					$("#gamemode").children().html("&#xe88d;");
-					setGameMode(0);
-				});
-			} else {
-				$("#gamemode").removeClass("on").off().on('click', function() {
-					$("#gamemode").addClass("disabled").off();
-					$("#gamemode").children().html("&#xe88d;");
-					setGameMode(1);
-				});;
-			}
-			$("#gamemode").removeClass("disabled");
-			$("#gamemode").children().html("&#xe834;");
-			if (dashboard["adult"] == true) {
-				$("#nsfw").addClass("on").off().on('click', function() {
-					$("#nsfw").addClass("disabled").off();
-					$("#nsfw").children().html("&#xe88d;");
-					setNsfw(0);
-				});
-			} else {
-				$("#nsfw").removeClass("on").off().on('click', function() {
-					$("#nsfw").addClass("disabled").off();
-					$("#nsfw").children().html("&#xe88d;");
-					setNsfw(1);
-				});;
-			}
-			$("#nsfw").removeClass("disabled");
-			$("#nsfw").children().html("&#xe800;");
-			if (dashboard["commissions"] == true) {
-				$("#commissions").addClass("on").off().on('click', function() {
-					$("#commissions").addClass("disabled").off();
-					$("#commissions").children().html("&#xe88d;");
-					setCommissionMode(0);
-				});
-			} else {
-				$("#commissions").removeClass("on").off().on('click', function() {
-					$("#commissions").addClass("disabled").off();
-					$("#commissions").children().html("&#xe88d;");
-					setCommissionMode(1);
-				});;
-			}
-			$("#commissions").removeClass("disabled");
-			$("#commissions").children().html("&#xe88e;");
-		}
-	});
-}
-
 function updateAdvanced() {
-	if (!settings.streamer) { // temp: no streamer mode
+	if (!settings.streamer) {
 		$("#advanced").hide();
 		$(".ms_inv").hide();
 	} else {
 		$("#advanced").show();
-		if (token)
-			$(".ms_inv").show();
+		/* if (token) */
+		$(".ms_inv").show();
 		
-		updateDashboard();
+		/* updateDashboard(); */
 		
 		// register the invite bar and button
-		storage.local.get("API_USER", function(items) {
-			if (items["API_USER"] && items["API_USER"]["channel_details"] && items["API_USER"]["channel_details"]["account_type"] == "premium") {
+		/* storage.local.get("API_USER", function(items) { */
+			/* if (items["API_USER"] && items["API_USER"]["channel_details"] && items["API_USER"]["channel_details"]["account_type"] == "premium") { */
 				$("#inviteBtn").off().on('click', function() {
 					var name = $("#channelToInvite_txt").val();
 					invite(name);
@@ -483,10 +356,11 @@ function updateAdvanced() {
 					}
 				});
 				$("#invitebar").show();
-			} else {
+			/* } */
+			/* else {
 				$("#invitebar").hide();
-			}
-		});
+			} */
+		/* }); */
 
 		// loop through invite accept/decline/revoke buttons
 		var decline = $('.ms_dec');
@@ -496,7 +370,7 @@ function updateAdvanced() {
 			
 			// register the leave button
 			$(this).off().on('click', function() {
-				$.post("https://picarto.tv/process/settings/multistream", {type: "multistream", leaveMultistream: id}, function(data) {}, "json").done(function(data) {
+				/* $.post("https://picarto.tv/process/settings/multistream", {type: "multistream", leaveMultistream: id}, function(data) {}, "json").done(function(data) {
 					if (data.multistreamLeft == 1) {
 						if (isDevMode()) {
 							console.log("Refusing multistream...");
@@ -505,7 +379,7 @@ function updateAdvanced() {
 					}
 				}).fail(function() {
 					displayErrorMsg(223);
-				});
+				}); */
 			}).on('mouseover', function() {
 				$(this).parent().parent().parent().css("background-color", "rgba(116, 57, 52, 0.95)")
 			}).on('mouseout', function() {
@@ -519,7 +393,7 @@ function updateAdvanced() {
 			
 			// register the accept button
 			$(this).off().on('click', function() {
-				$.post("https://picarto.tv/process/settings/multistream", {type: "multistream", acceptInvitation: id}, function(data) {}, "json").done(function(data) {
+				/* $.post("https://picarto.tv/process/settings/multistream", {type: "multistream", acceptInvitation: id}, function(data) {}, "json").done(function(data) {
 					if (isDevMode()) {
 						console.log("Accepting multistream...");
 					}
@@ -545,7 +419,7 @@ function updateAdvanced() {
 					}
 				}).fail(function() {
 					console.log("Whoops. it failed!");
-				});
+				}); */
 			}).on('mouseover', function() {
 				$(this).parent().parent().parent().css("background-color", "rgba(95, 116, 52, 0.95)")
 			}).on('mouseout', function() {
@@ -559,7 +433,7 @@ function updateAdvanced() {
 			
 			// register the uninvite button
 			$(this).off().on('click', function() {
-				$.post("https://picarto.tv/process/settings/multistream", {type: "multistream", removeMultistream: id}, function(data) {}, "json").done(function(data) {
+				/* $.post("https://picarto.tv/process/settings/multistream", {type: "multistream", removeMultistream: id}, function(data) {}, "json").done(function(data) {
 					if (data.removed == 1) {
 						if (isDevMode()) {
 							console.log("Revoking session...");
@@ -568,7 +442,7 @@ function updateAdvanced() {
 					}
 				}).fail(function() {
 					displayErrorMsg(224);
-				});
+				}); */
 			}).on('mouseover', function() {
 				$(this).parent().parent().parent().css("background-color", "rgba(116, 57, 52, 0.95)")
 			}).on('mouseout', function() {
@@ -657,12 +531,12 @@ function invite(name) {
 // main update function
 function update() {
 	
-	if (notifcache[0]) {
+	/* if (notifcache[0]) {
 		$('#notif_badge').show();
 		$('#notif_badge').text(notifcache.length);
 	}
 	else
-		$('#notif_badge').hide();
+		$('#notif_badge').hide(); */
 	
 	multistream = false;
 	
@@ -683,8 +557,8 @@ function update() {
 					});
 				});
 				updateMulti();
-				updateNotifications();
-				updateRecordings();
+				/* updateNotifications(); */
+				/* updateRecordings(); */
 				
 				break;
 			case 1:
@@ -699,14 +573,14 @@ function update() {
 		}
 	});
 	
-	if (token) {
+	/* if (token) { */
 		$(".dashboard-enabled").show();
 		$(".dashboard-disabled").hide();
-	}
+	/* }
 	else {
 		$(".dashboard-enabled").hide();
 		$(".dashboard-disabled").show();
-	}
+	} */
 }
 
 // get default settings or fetch from storage
@@ -748,14 +622,14 @@ function toggleSetting(s, cond, err = false) {
 function toggleChildSettings() {
 	toggleSetting("alert", !settings.notifications);
 	toggleSetting("dingvolume", !settings.notifications || !settings.alert);
-	toggleSetting("badgenotif", settings.picartobar);
-	toggleSetting("picartobar", settings.badgenotif);
+	/* toggleSetting("badgenotif", settings.picartobar); */
+	/* toggleSetting("picartobar", settings.badgenotif); */
 	
 	// disable broken settings by force.
-	toggleSetting("badgenotif", true, true);
-	toggleSetting("expandstrm", true, true);
-	toggleSetting("markup", true, true);
-	toggleSetting("splitchatbox", true, true);
+	/* toggleSetting("badgenotif", true, true); */
+	/* toggleSetting("expandstrm", true, true); */
+	/* toggleSetting("markup", true, true); */
+	/* toggleSetting("splitchatbox", true, true); */
 	/* toggleSetting("streamer", true, true); */
 	/* toggleSetting("oauthshow", true, true); */
 }

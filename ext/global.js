@@ -65,28 +65,44 @@ async function getCookies(domains, name, callback, failure) {
 	});
 } */
 
-async function getAPI(url, callback) {
+async function ajax(url, callback, method, dataType, contentType) {
+	let auth_bear = auth["access-token"];
+	let client = auth["client"];
+	let uid = auth["uid"];
+	
 	try {
 		await $.ajax({
-			url: apiurl + url,
+			url: url,
 			method: "GET",
-			dataType: "json",
+			dataType: dataType,
 			crossDomain: true,
-			contentType: "application/json; charset=utf-8",
+			contentType: contentType,
 			cache: false,
 			beforeSend: function (xhr) {
-				xhr.setRequestHeader("Authorization", "Bearer " + token);
+				xhr.setRequestHeader('access-token', auth_bear);
+				xhr.setRequestHeader('Client', client);
+				xhr.setRequestHeader('uid', uid);
 			},
-			success: function (data) {
-				typeof callback === 'function' && callback(data);
+			success: function (data, status, xhr) {
+				typeof callback === 'function' && callback(data, status, xhr);
 			},
 			error: function (jqXHR, textStatus, errorThrown) {
+				console.log(errorThrown);
+				console.log(textStatus);
 				console.log(jqXHR.responseText);
 			}
 		});
 	} catch (e) {
 		//
 	}
+}
+async function getAPI(url, callback) {
+	
+	let auth_bear = auth["access-token"];
+	let client = auth["client"];
+	let uid = auth["uid"];
+	
+	await ajax(apiurl + url, callback, "GET", "json", "application/json; charset=utf-8");
 }
 async function postAPI(url, callback) {
 	await $.ajax({
@@ -339,9 +355,80 @@ function updateCounters() {
 		/* updateAPI(()=>{ */
 			updateBadge(()=>{
 				updateMOTD(); // done!
-			})
-		/* }) */
+			});
+		/* }); */
+	});
+}
+
+function fetch_streams(callback) {
+	getAPI('streams?followedStreams=true&live_only=true&sfw=false', (data)=> { // live streams
+		exploreData = [];
+
+		let logged_in = true;
+		if (!data[0].following)
+			logged_in = false;
+		
+		if (logged_in) {
+			for (s in data) {
+				let stream = data[s];
+				if (!stream.live || !stream.following.value)
+					continue;
+				else
+					exploreData.push(stream);
+			}
+		} else
+			next_error = 2; // not logged in?!??
+		updateCounters(); // even in failure, update counters (set back to empty)
+		typeof callback === 'function' && callback();
+	});
+}
+function fetch_ownname(callback) {
+	if (ownname == "") {
+		log_message("No name set... check storage");
+		storage.local.get(["MYNAME"], (data) => {
+			if (data["MYNAME"]) {
+				ownname = data["MYNAME"];
+				typeof callback === 'function' && callback();
+			} else {
+				log_message("No name in cache... fetching!");
+				ajax('https://piczel.tv/watch', (data)=>{
+					sstr = data.substr(data.indexOf('api/avatars/') + 12, 50);
+					sstr = sstr.substr(0, sstr.indexOf('"'));
+					ownname = sstr;
+					storage.local.set({"MYNAME" : ownname});
+					log_message("Name set to: " + ownname);
+					
+					typeof callback === 'function' && callback();
+				}, "GET", "text", "application/x-www-form-urlencoded; charset=UTF-8");
+			}
+		});
+	} else {
+		typeof callback === 'function' && callback();
+	}
+}
+function fetch_multistream(callback) {
+	getAPI('streams/' + ownname + '/multi', (data)=> { // multistream info
+		multiData = data;
+		invitecount = 0;
+		for (m in data.received) {
+			if (!data.received[m].accepted)
+				invitecount++;
+		}
+		storage.local.set({"MULTISTREAM" : multiData});
+		typeof callback === 'function' && callback();
 	})
+}
+function fetch_notifications(callback) {
+	
+}
+async function fetch_piczel_data() {
+	fetch_streams(()=>{
+		fetch_ownname(()=> {
+			fetch_multistream(()=>{
+				fetch_notifications();
+			});
+		});
+	});
 }
 
 function update_from_cookies() {
@@ -353,7 +440,7 @@ function update_from_cookies() {
 			
 			storage.sync.set({"OAUTH" : c}, function() {
 				auth = c;
-				fetch_live_users();
+				fetch_piczel_data();
 			});
 		},
 		function() {
@@ -362,50 +449,6 @@ function update_from_cookies() {
 			updateCounters(); // update badge and live count without fetching from Piczel...
 		}
 	);
-}
-function fetch_live_users() {
-	
-	let auth_bear = auth["access-token"];
-	let client = auth["client"];
-	let uid = auth["uid"];
-	
-	$.ajax({
-		url: 'https://piczel.tv/api/streams?followedStreams=true&live_only=true&sfw=false',
-		method: "GET",
-		dataType: "json",
-		crossDomain: true,
-		contentType: "application/json; charset=utf-8",
-		cache: false,
-		beforeSend: function (xhr) {
-			xhr.setRequestHeader('access-token', auth_bear);
-			xhr.setRequestHeader('Client', client);
-			xhr.setRequestHeader('uid', uid);
-		},
-		success: function(data, status, xhr) {
-			
-			exploreData = [];
-
-			let logged_in = true;
-			if (!data[0].following)
-				logged_in = false;
-			
-			if (logged_in) {
-				for (s in data) {
-					let stream = data[s];
-					if (!stream.live || !stream.following.value)
-						continue;
-					else
-						exploreData.push(stream);
-				}
-			} else
-			    next_error = 2; // not logged in?!??
-			
-			updateCounters();
-		},
-		error: function(data) {
-			log_message(data); // oh no
-		}
-	});
 }
 
 // get default settings or fetch from storage

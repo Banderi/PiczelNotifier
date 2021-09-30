@@ -6,7 +6,6 @@
 		"*://*.piczel.tv/*",
 		"storage",
 		"notifications",
-		"identity",
 		"cookies"
 	],
 	"description": "An unofficial notifier for Piczel.",
