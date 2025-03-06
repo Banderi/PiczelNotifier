@@ -1,1 +1,5 @@
 *.zip
+*.amo-upload-uuid
+*.web-extension-id
+*.xpi
+*.bat

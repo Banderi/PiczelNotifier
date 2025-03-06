@@ -361,23 +361,23 @@ function updateCounters() {
 }
 
 function fetch_streams(callback) {
-	getAPI('streams?followedStreams=true&live_only=true&sfw=false', (data)=> { // live streams
+	getAPI('streams?followedStreams=true&live_only=false&sfw=false', (data)=> { // live streams
 		exploreData = [];
 
-		let logged_in = true;
+		/* let logged_in = true;
 		if (!data[0].following)
-			logged_in = false;
+			logged_in = false; */
 		
-		if (logged_in) {
+		/* if (logged_in) { */
 			for (s in data) {
 				let stream = data[s];
-				if (!stream.live || !stream.following.value)
+				if (!stream.live || !stream.following || !stream.following.value)
 					continue;
 				else
 					exploreData.push(stream);
 			}
-		} else
-			next_error = 2; // not logged in?!??
+		/* } else
+			next_error = 2; // not logged in?!?? */
 		updateCounters(); // even in failure, update counters (set back to empty)
 		typeof callback === 'function' && callback();
 	});
