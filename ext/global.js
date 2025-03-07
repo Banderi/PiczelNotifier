@@ -21,7 +21,7 @@ var motd = "First version!";
 var livecount = 0;
 var invitecount = 0;
 var ownname = "";
-var exploreData = {};
+var exploreData = [];
 var alreadyStreaming = [];
 var notifications = 0;
 
@@ -58,12 +58,6 @@ async function getCookies(domains, name, callback, failure) {
 	if (failure)
 		return failure(); // none of the domains matched....
 }
-/* function setCookie(url, name, value, callback) {
-	browser.cookies.set({"url": url, "name": name, "value": value}, function() {
-		if (callback)
-			callback();
-	});
-} */
 
 async function ajax(url, callback, method, dataType, contentType) {
 	let auth_bear = auth["access-token"];
@@ -162,7 +156,8 @@ function updateLive(callback) {
 			for (i in exploreData) {
 				
 				// got a match! cache will be updated and name will be remembered
-				if (exploreData[i].user.username && name === exploreData[i].user.username) {
+				/* if (exploreData[i].user.username && name === exploreData[i].user.username) { */
+				if (exploreData[i].username && name === exploreData[i].username) {
 					
 					/* exploreData[i]["old"] = true; */
 					live = true;
@@ -360,24 +355,21 @@ function updateCounters() {
 	});
 }
 
-function fetch_streams(callback) {
-	getAPI('streams?followedStreams=true&live_only=false&sfw=false', (data)=> { // live streams
+async function fetch_streams(callback) {
+	getAPI('users/me/following', async (data)=> { // live streams
 		exploreData = [];
-
-		/* let logged_in = true;
-		if (!data[0].following)
-			logged_in = false; */
-		
-		/* if (logged_in) { */
-			for (s in data) {
-				let stream = data[s];
-				if (!stream.live || !stream.following || !stream.following.value)
-					continue;
-				else
-					exploreData.push(stream);
+	
+		for (f in data) {
+			let stream = data[f].stream;
+			if (!stream.live || !stream.following || !stream.following.value)
+				continue;
+			else {
+				await getAPI('streams/'+stream.username, (data)=> { // fetch user data (e.g. avatar url)
+					stream["user"] = data.data[0].user				// with a second call and append to exploreData
+				});
+				exploreData.push(stream);
 			}
-		/* } else
-			next_error = 2; // not logged in?!?? */
+		}
 		updateCounters(); // even in failure, update counters (set back to empty)
 		typeof callback === 'function' && callback();
 	});
@@ -446,6 +438,7 @@ function update_from_cookies() {
 		function() {
 			log_message("No auth field found... Not logged in?!");
 			next_error = 2;
+			exploreData = [];
 			updateCounters(); // update badge and live count without fetching from Piczel...
 		}
 	);
@@ -541,7 +534,7 @@ browser.runtime.onMessage.addListener(
 			livecount = 0;
 			invitecount = 0;
 			ownname = "";
-			exploreData = {};
+			exploreData = [];
 			notloggedinrecall = false;
 			token = "";
 			restart();
