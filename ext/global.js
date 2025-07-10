@@ -59,7 +59,7 @@ async function getCookies(domains, name, callback, failure) {
 		return failure(); // none of the domains matched....
 }
 
-async function ajax(url, callback, method, dataType, contentType) {
+async function ajax(url, callback, failure, method, dataType, contentType) {
 	let auth_bear = auth["access-token"];
 	let client = auth["client"];
 	let uid = auth["uid"];
@@ -77,26 +77,29 @@ async function ajax(url, callback, method, dataType, contentType) {
 				xhr.setRequestHeader('Client', client);
 				xhr.setRequestHeader('uid', uid);
 			},
-			success: function (data, status, xhr) {
-				typeof callback === 'function' && callback(data, status, xhr);
+			success: function (r, status, xhr) {
+				typeof callback === 'function' && callback(r, status, xhr);
 			},
 			error: function (jqXHR, textStatus, errorThrown) {
-				console.log(errorThrown);
-				console.log(textStatus);
-				console.log(jqXHR.responseText);
+				if (!failure) {
+					console.log(errorThrown);
+					console.log(textStatus);
+					console.log(jqXHR.responseText);
+				}
+				typeof failure === 'function' && failure(jqXHR.responseJSON, textStatus, errorThrown);
 			}
 		});
 	} catch (e) {
 		//
 	}
 }
-async function getAPI(url, callback) {
+async function getAPI(url, callback, failure = null) {
 	
 	let auth_bear = auth["access-token"];
 	let client = auth["client"];
 	let uid = auth["uid"];
 	
-	await ajax(apiurl + url, callback, "GET", "json", "application/json; charset=utf-8");
+	await ajax(apiurl + url, callback, failure, "GET", "json", "application/json; charset=utf-8");
 }
 async function postAPI(url, callback) {
 	await $.ajax({
@@ -108,8 +111,8 @@ async function postAPI(url, callback) {
 		/* beforeSend: function (xhr) {
 			xhr.setRequestHeader("Authorization", "Bearer " + token);
 		}, */
-		success: function (data) {
-			typeof callback === 'function' && callback(data);
+		success: function (r) {
+			typeof callback === 'function' && callback(r);
 		},
 		error: function (jqXHR, textStatus, errorThrown) {
 			console.log(textStatus);
@@ -200,9 +203,9 @@ function updateLive(callback) {
 }
 function updateAPI(callback) {
 	
-	storage.local.get(["OAUTH"], (data) => {
-		if (data["OAUTH"]) {
-			token = data["OAUTH"];
+	storage.local.get(["OAUTH"], (r) => {
+		if (r["OAUTH"]) {
+			token = r["OAUTH"];
 			if (token.indexOf(' ') != -1) {
 				token = token.substr(token.indexOf(' ') + 1);
 				storage.local.set({"OAUTH" : token});
@@ -213,8 +216,8 @@ function updateAPI(callback) {
 			}
 		}
 		if (token) {
-			storage.local.get(["CACHESTAMP"], (data) => {
-				if (data["CACHESTAMP"] && Date.now() < data["CACHESTAMP"] + 15000) {
+			storage.local.get(["CACHESTAMP"], (s) => {
+				if (s["CACHESTAMP"] && Date.now() < s["CACHESTAMP"] + 15000) {
 					//
 				} else {
 					getAPI("user", function(a) {
@@ -329,8 +332,8 @@ function updateBadge(callback) {
 function updateMOTD() {
 	let version = browser.runtime.getManifest().version;	
 	if (settings.updatemsg) {
-		storage.sync.get(["MOTD"], (data) => {
-			if ((data["MOTD"] && data["MOTD"] != "" && data["MOTD"].split('.').slice(0,2).join(".") != version.split('.').slice(0,2).join(".")) || !data["MOTD"] || data["MOTD"] == "") {
+		storage.sync.get(["MOTD"], (r) => {
+			if ((r["MOTD"] && r["MOTD"] != "" && r["MOTD"].split('.').slice(0,2).join(".") != version.split('.').slice(0,2).join(".")) || !r["MOTD"] || r["MOTD"] == "") {
 				browser.notifications.create("MOTD", {
 					type: "basic",
 					iconUrl: "icons/icon256.png",
@@ -356,18 +359,23 @@ function updateCounters() {
 }
 
 async function fetch_streams(callback) {
-	getAPI('users/me/following', async (data)=> { // live streams
+	getAPI('users/me/following', async (r)=> { // live streams
 		exploreData = [];
 	
-		for (f in data) {
-			let stream = data[f].stream;
+		for (f in r) {
+			let stream = r[f].stream;
 			if (!stream.live || !stream.following || !stream.following.value)
 				continue;
 			else {
-				await getAPI('streams/'+stream.username, (data)=> { // fetch user data (e.g. avatar url)
-					stream["user"] = data.data[0].user				// with a second call and append to exploreData
+				await getAPI('streams/'+stream.username, (s)=> { // fetch user data (e.g. avatar url) with a second call and append to exploreData
+					stream["user"] = s.data[0].user
+					exploreData.push(stream);
+				}, (f)=> {
+					if (f.meta && f.meta.wrong_pass) { // password-protected streams
+						stream["user"] = f.meta.wrong_pass[0].user
+						exploreData.push(stream);
+					}
 				});
-				exploreData.push(stream);
 			}
 		}
 		updateCounters(); // even in failure, update counters (set back to empty)
@@ -377,21 +385,19 @@ async function fetch_streams(callback) {
 function fetch_ownname(callback) {
 	if (ownname == "") {
 		log_message("No name set... check storage");
-		storage.local.get(["MYNAME"], (data) => {
-			if (data["MYNAME"]) {
-				ownname = data["MYNAME"];
+		storage.local.get(["MYNAME"], (r) => {
+			if (r["MYNAME"]) {
+				ownname = r["MYNAME"];
 				typeof callback === 'function' && callback();
 			} else {
 				log_message("No name in cache... fetching!");
-				ajax('https://piczel.tv/watch', (data)=>{
-					sstr = data.substr(data.indexOf('api/avatars/') + 12, 50);
-					sstr = sstr.substr(0, sstr.indexOf('"'));
-					ownname = sstr;
+				
+				getAPI("users/me", async(r)=>{
+					ownname = r.username;
 					storage.local.set({"MYNAME" : ownname});
 					log_message("Name set to: " + ownname);
-					
 					typeof callback === 'function' && callback();
-				}, "GET", "text", "application/x-www-form-urlencoded; charset=UTF-8");
+				});
 			}
 		});
 	} else {
@@ -399,11 +405,11 @@ function fetch_ownname(callback) {
 	}
 }
 function fetch_multistream(callback) {
-	getAPI('streams/' + ownname + '/multi', (data)=> { // multistream info
-		multiData = data;
+	getAPI('streams/' + ownname + '/multi', (r)=> { // multistream info
+		multiData = r;
 		invitecount = 0;
-		for (m in data.received) {
-			if (!data.received[m].accepted)
+		for (m in r.received) {
+			if (!r.received[m].accepted)
 				invitecount++;
 		}
 		storage.local.set({"MULTISTREAM" : multiData});
@@ -426,7 +432,7 @@ async function fetch_piczel_data() {
 function update_from_cookies() {
 	// fetch auth data from cookies, use that to get live streams info
 	getCookies(["https://piczel.tv", "http://piczel.tv", "https://www.piczel.tv", "http://www.piczel.tv"], "authHeaders",
-		function(a) {
+		function(a) { // success == cookies successfully FETCHED
 			let b = decodeURIComponent(a);
 			let c = JSON.parse(b);
 			
@@ -435,7 +441,7 @@ function update_from_cookies() {
 				fetch_piczel_data();
 			});
 		},
-		function() {
+		function() { // failure, cookies not fetched
 			log_message("No auth field found... Not logged in?!");
 			next_error = 2;
 			exploreData = [];
@@ -475,9 +481,9 @@ function update() {
 }
 
 function startup() {
-	storage.sync.get(["SETTINGS"], (data) => {
-		for (let a in data["SETTINGS"]) {
-			let setting = data["SETTINGS"][a];
+	storage.sync.get(["SETTINGS"], (r) => {
+		for (let a in r["SETTINGS"]) {
+			let setting = r["SETTINGS"][a];
 			settings[a] = setting;
 		}
 		

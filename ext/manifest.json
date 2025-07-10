@@ -1,6 +1,6 @@
 {
 	"name": "Piczel Notifier",
-	"version": "0.1.6",
+	"version": "0.1.8",
 	"manifest_version": 2,
 	"permissions": [
 		"*://*.piczel.tv/*",
