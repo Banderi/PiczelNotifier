@@ -1,7 +1,7 @@
 if (chrome) {
 	storage = chrome.storage;
 	tabs = chrome.tabs;
-	notifications = chrome.notifications;
+	NOTIFICATIONS = chrome.notifications;
 	browser = chrome;
 }
 if (!browser.cookies) {
@@ -10,33 +10,15 @@ if (!browser.cookies) {
 function isDevMode() {
     return !('update_url' in browser.runtime.getManifest());
 }
+function IsNullOrWhitespace(input) {
+  return !input || !input.trim();
+}
 
 function log_message(t) {
 	if (isDevMode())
 		console.log(t);
 }
-
-var motd = "First version!";
-
-var livecount = 0;
-var invitecount = 0;
-var ownname = "";
-var exploreData = [];
-var alreadyStreaming = [];
-var notifications = 0;
-
-var notloggedinrecall = false;
-var next_error = 0;
-
-var auth = {};
-
-var apiurl = 'https://piczel.tv/api/'
-var offurl = 'https://piczel.tv/static'
-var piczelurl = "http://piczel.tv/watch/"
-
-function IsNullOrWhitespace( input ) {
-  return !input || !input.trim();
-}
+var MOTD = "Fixed the API calls after Feb. 2026, code refactors.";
 
 async function getCookies(domains, name, callback, failure) {
 	for (d in domains) {
@@ -59,11 +41,15 @@ async function getCookies(domains, name, callback, failure) {
 		return failure(); // none of the domains matched....
 }
 
+var API_URL = 'https://piczel.tv/api/'
+var STATIC_URL = 'https://piczel.tv/static'
+var WATCH_URL = "http://piczel.tv/watch/"
+var AUTH = {};
+var API_TOKEN = ""; // currently unused
 async function ajax(url, callback, failure, method, dataType, contentType) {
-	let auth_bear = auth["access-token"];
-	let client = auth["client"];
-	let uid = auth["uid"];
-	
+	let auth_bear = AUTH["access-token"];
+	let client = AUTH["client"];
+	let uid = AUTH["uid"];
 	try {
 		await $.ajax({
 			url: url,
@@ -94,16 +80,14 @@ async function ajax(url, callback, failure, method, dataType, contentType) {
 	}
 }
 async function getAPI(url, callback, failure = null) {
-	
-	let auth_bear = auth["access-token"];
-	let client = auth["client"];
-	let uid = auth["uid"];
-	
-	await ajax(apiurl + url, callback, failure, "GET", "json", "application/json; charset=utf-8");
+	let auth_bear = AUTH["access-token"];
+	let client = AUTH["client"];
+	let uid = AUTH["uid"];
+	await ajax(API_URL + url, callback, failure, "GET", "json", "application/json; charset=utf-8");
 }
 async function postAPI(url, callback) {
 	await $.ajax({
-		url: apiurl + url,
+		url: API_URL + url,
 		method: "POST",
 		crossDomain: true,
 		contentType: "application/json; charset=utf-8",
@@ -121,10 +105,11 @@ async function postAPI(url, callback) {
 	});
 }
 
+var DING = new Audio('audio/ding.ogg');
 function notify(name, type, avatarurl) {
 	
 	if (type == "live") {
-		if (settings.notifications) {
+		if (SETTINGS.notifications) {
 			let timestamp = new Date().getTime();
 			let id = name + '__@@' + timestamp;
 			browser.notifications.create(id, {
@@ -133,89 +118,79 @@ function notify(name, type, avatarurl) {
 				title: "Currently streaming on Piczel:",
 				message: name
 			}, function() {});
-			if (settings.alert)
-				ding.play();
+			if (SETTINGS.alert)
+				DING.play();
 		}
 	}
 }
 
+// Piczel data
+var OWNNAME = "";
+var GLOBAL_LIVE_STREAMS = {};
+var FOLLOW_LIST = [];
+var LIVE_COUNT = 0;
+var INVITES_COUNT = 0;
+var NOTIFICATIONS = 0;
+var NEXT_ERROR = 0;
+
 function updateLive(callback) {
 	
-	livecount = 0;
-	let cleanData = {};
+	LIVE_COUNT = 0;
 	
 	// get the cached list of live users and update accordingly!
 	storage.local.get("LIVE", function(items) {
 		
 		let livecache = items["LIVE"];
-		for (u in livecache) { // loop through cached users to update for removal
-			
-			let stream = livecache[u]; // the actual stored object
-			let name = u; // saved with key rather than index
-			
-			let live = false;
-			
-			// compare with newly pulled data
-			for (i in exploreData) {
-				
-				// got a match! cache will be updated and name will be remembered
-				/* if (exploreData[i].user.username && name === exploreData[i].user.username) { */
-				if (exploreData[i].username && name === exploreData[i].username) {
-					
-					/* exploreData[i]["old"] = true; */
-					live = true;
-				}
-			}
-			
-			// user no longer online
-			if (!live) {
-				
-				// remove user from cache
-				delete livecache[u]
-				log_message("User '" + name + "' no longer online (removed from cache)");
+		if (typeof livecache !== typeof {})
+			livecache = {};
+
+		// loop through cached users to update for removal
+		for (username in livecache) {
+			if (!(username in GLOBAL_LIVE_STREAMS)) {
+				delete livecache[username];
+				log_message("User '" + username + "' no longer online (removed from cache)");
 			}
 		}
 		
 		// add the remaining users and dispatch notifications
-		for (s in exploreData) {
-			
-			let stream = exploreData[s];
-			let name = stream.username;
-			let avatarurl = stream.user.avatar.url;
-			
-			cleanData[name] = stream;
-			
-			// new user online
-			if (!livecache || !(name in livecache)) {
-				log_message(name + " just started streaming!");
-				
-				// dispatch live notification (or not)
-				notify(name, "live", avatarurl);
+		let cleanData = {};
+		for (i in FOLLOW_LIST) {
+			let username = FOLLOW_LIST[i];
+			if (username in GLOBAL_LIVE_STREAMS) {
+				let formatted = GLOBAL_LIVE_STREAMS[username];
+				if (!(username in livecache)) {
+					log_message(username + " just started streaming!");
+					notify(username, "live", formatted.avatarurl); // dispatch live notification (or not)
+				}
+				cleanData[username] = formatted;
 			}
 		}
+
+		// update live count
+		LIVE_COUNT = Object.keys(cleanData).length;
+		if (LIVE_COUNT == 0)
+			log_message("No users streaming.");
 		
-		livecount = Object.keys(cleanData).length;
-		
-		browser.storage.local.set({"LIVE" : cleanData}, function() {
+		browser.storage.local.set({"LIVE" : cleanData}, function() { // synchronous, but returns promise on success
 			typeof callback === 'function' && callback();
 		});
 	});
 }
-function updateAPI(callback) {
+function updateAPI(callback) { // currently unused
 	
 	storage.local.get(["OAUTH"], (r) => {
 		if (r["OAUTH"]) {
-			token = r["OAUTH"];
-			if (token.indexOf(' ') != -1) {
-				token = token.substr(token.indexOf(' ') + 1);
-				storage.local.set({"OAUTH" : token});
+			API_TOKEN = r["OAUTH"];
+			if (API_TOKEN.indexOf(' ') != -1) {
+				API_TOKEN = API_TOKEN.substr(API_TOKEN.indexOf(' ') + 1);
+				storage.local.set({"OAUTH" : API_TOKEN});
 			}
-			if (IsNullOrWhitespace(token)) {
-				token = "";
+			if (IsNullOrWhitespace(API_TOKEN)) {
+				API_TOKEN = "";
 				storage.local.remove("OAUTH");
 			}
 		}
-		if (token) {
+		if (API_TOKEN) {
 			storage.local.get(["CACHESTAMP"], (s) => {
 				if (s["CACHESTAMP"] && Date.now() < s["CACHESTAMP"] + 15000) {
 					//
@@ -226,9 +201,9 @@ function updateAPI(callback) {
 					});
 					getAPI("user/notifications", function(c) {
 						if (c)
-							notifications = c.length;
+							NOTIFICATIONS = c.length;
 						else
-							notifications = 0;
+							NOTIFICATIONS = 0;
 						
 						storage.local.set({"API_NOTIFICATIONS" : c});
 						
@@ -247,9 +222,9 @@ function updateAPI(callback) {
 			});
 			getAPI("user/multistream", function(b) {
 				if (b["incoming"])
-					invitecount = b["incoming"].length;
+					INVITES_COUNT = b["incoming"].length;
 				else
-					invitecount = 0;
+					INVITES_COUNT = 0;
 				storage.local.set({"API_MULTISTREAM" : b});
 			});
 		}
@@ -258,18 +233,18 @@ function updateAPI(callback) {
 	typeof callback === 'function' && callback();
 }
 function updateBadge(callback) {
-	browser.browserAction.setBadgeBackgroundColor( { color: settings.badgecolor} );
+	browser.browserAction.setBadgeBackgroundColor( { color: SETTINGS.badgecolor} );
 			
 	var badgetext = "";
 	var badgetooltip = "";
 	
-	if(settings.badgenotif) {
-		if (notifications == 1) {
+	if(SETTINGS.badgenotif) {
+		if (NOTIFICATIONS == 1) {
 			badgetext = "1";
 			badgetooltip = "1 person streaming";
-		} else if (notifications > 1) {
-			badgetext = notifications.toString();
-			badgetooltip = notifications.toString() + " notifications";
+		} else if (NOTIFICATIONS > 1) {
+			badgetext = NOTIFICATIONS.toString();
+			badgetooltip = NOTIFICATIONS.toString() + " notifications";
 		} else {
 			var badgetext = "";
 			var badgetooltip = "";
@@ -278,46 +253,46 @@ function updateBadge(callback) {
 		browser.browserAction.setTitle({"title": badgetooltip});
 	}
 	else {
-		if (settings.streamer) {
+		if (SETTINGS.streamer) {
 			
-			if (livecount == 1) {
+			if (LIVE_COUNT == 1) {
 				badgetext = "1";
 				badgetooltip = "1 person streaming";
-			} else if (livecount > 1) {
-				badgetext = livecount.toString();
-				badgetooltip = livecount.toString() + " people streaming";
+			} else if (LIVE_COUNT > 1) {
+				badgetext = LIVE_COUNT.toString();
+				badgetooltip = LIVE_COUNT.toString() + " people streaming";
 			} else {
 				badgetext = "";
 				badgetooltip = "";
 			}
-			if (livecount > 0) {
-				if (invitecount == 1) {
+			if (LIVE_COUNT > 0) {
+				if (INVITES_COUNT == 1) {
 					badgetext = badgetext + ", 1";
 					badgetooltip = badgetooltip + ", 1 invite";
-				} else if (invitecount > 1) {
-					badgetext = badgetext + ", " + invitecount.toString();
-					badgetooltip = badgetooltip + ", " + invitecount.toString() + " invites";
+				} else if (INVITES_COUNT > 1) {
+					badgetext = badgetext + ", " + INVITES_COUNT.toString();
+					badgetooltip = badgetooltip + ", " + INVITES_COUNT.toString() + " invites";
 				}
 			}
 			else {
-				if (invitecount == 1) {
+				if (INVITES_COUNT == 1) {
 					badgetext = "1";
 					badgetooltip = "1 invite";
-				} else if (invitecount > 1) {
-					badgetext = invitecount.toString();
-					badgetooltip = invitecount.toString() + " invites";
+				} else if (INVITES_COUNT > 1) {
+					badgetext = INVITES_COUNT.toString();
+					badgetooltip = INVITES_COUNT.toString() + " invites";
 				}
 			}
 			browser.browserAction.setBadgeText({"text": badgetext});
 			browser.browserAction.setTitle({"title": badgetooltip});
 		}
 		else {		
-			if (livecount == 1) {
+			if (LIVE_COUNT == 1) {
 				badgetext = "1";
 				badgetooltip = "1 person streaming";
-			} else if (livecount > 1) {
-				badgetext = livecount.toString();
-				badgetooltip = livecount.toString() + " people streaming";
+			} else if (LIVE_COUNT > 1) {
+				badgetext = LIVE_COUNT.toString();
+				badgetooltip = LIVE_COUNT.toString() + " people streaming";
 			} else {
 				badgetext = "";
 				badgetooltip = "";
@@ -331,14 +306,14 @@ function updateBadge(callback) {
 }
 function updateMOTD() {
 	let version = browser.runtime.getManifest().version;	
-	if (settings.updatemsg) {
+	if (SETTINGS.updatemsg) {
 		storage.sync.get(["MOTD"], (r) => {
 			if ((r["MOTD"] && r["MOTD"] != "" && r["MOTD"].split('.').slice(0,2).join(".") != version.split('.').slice(0,2).join(".")) || !r["MOTD"] || r["MOTD"] == "") {
 				browser.notifications.create("MOTD", {
 					type: "basic",
 					iconUrl: "icons/icon256.png",
 					title: "Piczel Notifier updated to " + version.toString().substr(0, 3) + "!",
-					message: motd
+					message: MOTD
 				}, function() {});
 			}
 			storage.sync.set({"MOTD" : version});
@@ -348,54 +323,53 @@ function updateMOTD() {
 		storage.sync.set({"MOTD" : version});
 }
 
-function updateCounters() {
-	updateLive(()=>{
-		/* updateAPI(()=>{ */
-			updateBadge(()=>{
-				updateMOTD(); // done!
-			});
-		/* }); */
-	});
+// these are the actual functions translating the raw exploreData fields into formatted data
+function getFormattedStreamData(raw_data) {
+	let formatted_data = {};
+	for (i in raw_data) {
+		let raw = raw_data[i];
+		formatted_data[raw.username] = {
+			"live": raw.live,
+			"live_since" : raw.live_since,
+			"adult" : raw.adult,
+			"viewers" : raw.viewers,
+			"avatarurl": raw.user.avatar.url
+		};
+	}
+	return formatted_data;
+}
+function getSimpleFollowedList(raw_data) {
+	let list = [];
+	for (i in raw_data)
+		list.push(raw_data[i].stream_username);
+	return list;
 }
 
 async function fetch_streams(callback) {
-	getAPI('users/me/following', async (r)=> { // live streams
-		exploreData = [];
-	
-		for (f in r) {
-			let stream = r[f].stream;
-			if (!stream.live || !stream.following || !stream.following.value)
-				continue;
-			else {
-				await getAPI('streams/'+stream.username, (s)=> { // fetch user data (e.g. avatar url) with a second call and append to exploreData
-					stream["user"] = s.data[0].user
-					exploreData.push(stream);
-				}, (f)=> {
-					if (f.meta && f.meta.wrong_pass) { // password-protected streams
-						stream["user"] = f.meta.wrong_pass[0].user
-						exploreData.push(stream);
-					}
-				});
-			}
-		}
-		updateCounters(); // even in failure, update counters (set back to empty)
-		typeof callback === 'function' && callback();
+	getAPI('users/me/following', async (r)=> { // followed streams -- requires user being logged in
+		FOLLOW_LIST = getSimpleFollowedList(r);
+		getAPI('streams', async (q)=> { // global current live streams
+			GLOBAL_LIVE_STREAMS = getFormattedStreamData(q);
+
+			// updateCounters(); // even in failure, update counters (set back to empty)
+			typeof callback === 'function' && callback();
+		});
 	});
 }
 function fetch_ownname(callback) {
-	if (ownname == "") {
+	if (OWNNAME == "") {
 		log_message("No name set... check storage");
 		storage.local.get(["MYNAME"], (r) => {
 			if (r["MYNAME"]) {
-				ownname = r["MYNAME"];
+				OWNNAME = r["MYNAME"];
 				typeof callback === 'function' && callback();
 			} else {
 				log_message("No name in cache... fetching!");
 				
 				getAPI("users/me", async(r)=>{
-					ownname = r.username;
-					storage.local.set({"MYNAME" : ownname});
-					log_message("Name set to: " + ownname);
+					OWNNAME = r.username;
+					storage.local.set({"MYNAME" : OWNNAME});
+					log_message("Name set to: " + OWNNAME);
 					typeof callback === 'function' && callback();
 				});
 			}
@@ -405,104 +379,105 @@ function fetch_ownname(callback) {
 	}
 }
 function fetch_multistream(callback) {
-	getAPI('streams/' + ownname + '/multi', (r)=> { // multistream info
-		multiData = r;
-		invitecount = 0;
+	getAPI('streams/' + OWNNAME + '/multi', (r)=> { // multistream info
+		INVITES_COUNT = 0;
 		for (m in r.received) {
 			if (!r.received[m].accepted)
-				invitecount++;
+				INVITES_COUNT++;
 		}
-		storage.local.set({"MULTISTREAM" : multiData});
+		storage.local.set({"MULTISTREAM" : r});
 		typeof callback === 'function' && callback();
 	})
 }
-function fetch_notifications(callback) {
-	
-}
-async function fetch_piczel_data() {
-	fetch_streams(()=>{
-		fetch_ownname(()=> {
-			fetch_multistream(()=>{
-				fetch_notifications();
-			});
-		});
-	});
-}
-
-function update_from_cookies() {
-	// fetch auth data from cookies, use that to get live streams info
-	getCookies(["https://piczel.tv", "http://piczel.tv", "https://www.piczel.tv", "http://www.piczel.tv"], "authHeaders",
-		function(a) { // success == cookies successfully FETCHED
-			let b = decodeURIComponent(a);
-			let c = JSON.parse(b);
-			
-			storage.sync.set({"OAUTH" : c}, function() {
-				auth = c;
-				fetch_piczel_data();
-			});
-		},
-		function() { // failure, cookies not fetched
-			log_message("No auth field found... Not logged in?!");
-			next_error = 2;
-			exploreData = [];
-			updateCounters(); // update badge and live count without fetching from Piczel...
-		}
-	);
+function fetch_notifications(callback) { // TODO?
+	//
 }
 
 // get default settings or fetch from storage
-let defaults = {};
-var settings = {};
+let SETTINGS_DEFAULTS = {};
+var SETTINGS = {};
 function initSettings(callback) {
 	const url = browser.runtime.getURL('defaults.json');
 	fetch(url)
 		.then(e => e.json())
 		.then(j =>
 	{
-		defaults = j;
-		settings = {
-			...defaults
+		SETTINGS_DEFAULTS = j;
+		SETTINGS = {
+			...SETTINGS_DEFAULTS
 		};
 		callback();
 	});
 }
 
-var updater = null;
-
 // main update function
-function update() {
+var UPDATER = null;
+async function update() {
 	
-	update_from_cookies(); // always use the field from the cookies directly
-	
-	storage.local.set({"ERROR" : next_error});
-	next_error = 0;
-	
-	updater = setTimeout(update, settings.updateinterval * 1000);
-}
+	// fetch auth data from cookies, use that to get live streams info
+	await new Promise((resolve) => {
+		getCookies(["https://piczel.tv", "http://piczel.tv", "https://www.piczel.tv", "http://www.piczel.tv"], "authHeaders",
+			function(a) { // success
+				let b = decodeURIComponent(a);
+				let c = JSON.parse(b);
+				
+				storage.sync.set({"OAUTH" : c}, function() {
+					AUTH = c;
 
+					// fetch piczel data
+					fetch_streams(() => {
+						fetch_ownname(() => {
+							fetch_multistream(() => {
+								fetch_notifications();
+								resolve();
+							});
+						});
+					});
+				});
+			},
+			function() { // failure
+				log_message("No auth field found... Not logged in?!");
+				NEXT_ERROR = 2;
+				FOLLOW_LIST = [];
+				resolve();
+			}
+		);
+	})
+	
+	// update badge and live count without fetching from Piczel...
+	updateLive(() => {
+		/* updateAPI(() => { */
+			updateBadge(() => {
+				updateMOTD(); // done!
+
+				storage.local.set({"ERROR" : NEXT_ERROR});
+				NEXT_ERROR = 0;
+				UPDATER = setTimeout(update, SETTINGS.updateinterval * 1000);
+			});
+		/* }); */
+	});
+}
 function startup() {
 	storage.sync.get(["SETTINGS"], (r) => {
 		for (let a in r["SETTINGS"]) {
 			let setting = r["SETTINGS"][a];
-			settings[a] = setting;
+			SETTINGS[a] = setting;
 		}
 		
 		// set notif volume
-		ding.volume = parseFloat(settings.dingvolume) / 100;
+		DING.volume = parseFloat(SETTINGS.dingvolume) / 100;
 		
 		// start the update!
-		if (!updater)
+		if (!UPDATER)
 			update();
 	});
 }
-
 function restart() {
 	initSettings(startup);
 }
-restart();
 
-// create audio alert object
-var ding = new Audio('audio/ding.ogg');
+// start!
+restart();
 
 // add listener to the desktop notification popups
 browser.notifications.onClicked.addListener(function(notificationId) {
@@ -515,8 +490,7 @@ browser.notifications.onClicked.addListener(function(notificationId) {
 });
 
 // listen for messages from other pages
-browser.runtime.onMessage.addListener(
-	function(request, sender, sendResponse) {
+browser.runtime.onMessage.addListener(function(request, sender, sendResponse) {
 		switch (request.message) {
 		case "setCount":
 			setCount(request.count);
@@ -527,7 +501,7 @@ browser.runtime.onMessage.addListener(
 			}
 			for (s in request) {
 				if (s != "message") {
-					settings[s] = request[s];
+					SETTINGS[s] = request[s];
 				}
 			}
 			restart();
@@ -536,17 +510,16 @@ browser.runtime.onMessage.addListener(
 			restart();
 			break
 		case "purgeAll":
-			settings = {};
-			livecount = 0;
-			invitecount = 0;
-			ownname = "";
-			exploreData = [];
-			notloggedinrecall = false;
-			token = "";
+			SETTINGS = {};
+			LIVE_COUNT = 0;
+			INVITES_COUNT = 0;
+			OWNNAME = "";
+			FOLLOW_LIST = [];
+			API_TOKEN = "";
 			restart();
 			break;
 		case "notificationRemoved":
-			notifications -= 1;
+			NOTIFICATIONS -= 1;
 			updateBadge();
 			break;
 		case "oauth":
@@ -569,5 +542,4 @@ browser.runtime.onMessage.addListener(
 			break;
 		}
 		return false;
-	}
-);
+});

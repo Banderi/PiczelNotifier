@@ -222,21 +222,21 @@ function updateLive(callback) {
 			peoplelive = false;
 			
 			// loop through cached users
-			for (u in livecache) {
+			for (username in livecache) {
 				
-				let stream = livecache[u];
-				let name = stream.username;
-				let thumb = stream.user.avatar.url;
+				// let stream = livecache[username];
+				// let name = stream.username;
+				// let thumb = stream.user.avatar.url;
 				
-				var found = jQuery.inArray(name, recentnames);
+				var found = jQuery.inArray(username, recentnames);
 				if (found >= 0) {
 					// name already present
 				} else
-					recentnames.push(name);
+					recentnames.push(username);
 				storage.sync.set({"RECENTNAMES" : recentnames});
 				
 				// add link to the window				
-				appendLiveLink(name, thumb);
+				appendLiveLink(username, livecache[username].avatarurl);
 				
 				peoplelive = true;
 			}
