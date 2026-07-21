@@ -222,7 +222,10 @@ function updateLive(callback) {
 			peoplelive = false;
 			
 			// loop through cached users
-			for (username in livecache) {
+			let sorted_users = Object.keys(livecache).sort();
+			for (i in sorted_users) {
+				let username = sorted_users[i];
+			// for (username in livecache) {
 				
 				// let stream = livecache[username];
 				// let name = stream.username;

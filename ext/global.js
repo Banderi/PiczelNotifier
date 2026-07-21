@@ -18,91 +18,110 @@ function log_message(t) {
 	if (isDevMode())
 		console.log(t);
 }
-var MOTD = "Fixed the API calls after Feb. 2026, code refactors.";
+var MOTD = "Fix for May 2026 API changes.";
 
-async function getCookies(domains, name, callback, failure) {
-	for (d in domains) {
-		// FORCE function to wait...
-		const value = await new Promise((resolve, reject) => {
-			browser.cookies.get({"url": domains[d], "name": name}, function(cookie) {
-				if (cookie) {
-					// console.log(cookie);
-					resolve(cookie.value);
-				} else reject();
-			});
-		}).catch(e => {
-			if (e)
-				console.log(e); // unexpected error???? otherwise, it's from "reject"
+// translates storage.local.get (fundamentally callback-based) into an await-able function
+async function getStorageAsync(keys) {
+	return new Promise((resolve) => {
+		storage.local.get(keys, (result) => {
+			resolve(result);
 		});
-		if (value && callback)
-			return callback(value, domains[d]);
-	}
-	if (failure)
-		return failure(); // none of the domains matched....
+	});
 }
 
+// var API_URL = 'https://api.piczel.tv/'
 var API_URL = 'https://piczel.tv/api/'
 var STATIC_URL = 'https://piczel.tv/static'
 var WATCH_URL = "http://piczel.tv/watch/"
-var AUTH = {};
-var API_TOKEN = ""; // currently unused
-async function ajax(url, callback, failure, method, dataType, contentType) {
-	let auth_bear = AUTH["access-token"];
-	let client = AUTH["client"];
-	let uid = AUTH["uid"];
-	try {
-		await $.ajax({
-			url: url,
-			method: "GET",
-			dataType: dataType,
-			crossDomain: true,
-			contentType: contentType,
-			cache: false,
-			beforeSend: function (xhr) {
-				xhr.setRequestHeader('access-token', auth_bear);
-				xhr.setRequestHeader('Client', client);
-				xhr.setRequestHeader('uid', uid);
-			},
-			success: function (r, status, xhr) {
-				typeof callback === 'function' && callback(r, status, xhr);
-			},
-			error: function (jqXHR, textStatus, errorThrown) {
-				if (!failure) {
+async function ajax(url, method, dataType, contentType) {
+	let _r = null;
+	await new Promise(async (resolve) => {
+		try {
+			await $.ajax({
+				url: url,
+				method: "GET",
+				dataType: dataType,
+				crossDomain: true,
+				contentType: contentType,
+				cache: false,
+				beforeSend: function (xhr) {
+					// xhr.setRequestHeader('access-token', auth_bear);
+					// xhr.setRequestHeader('Client', client);
+					// xhr.setRequestHeader('uid', uid);
+					xhr.setRequestHeader('Cache-Control', 'no-cache');
+					xhr.setRequestHeader('Pragma', 'no-cache');
+				},
+				success: function (r, status, xhr) {
+					// typeof callback === 'function' && callback(r, status, xhr);
+					_r = r;
+					resolve();
+				},
+				error: function (jqXHR, textStatus, errorThrown) {
+					// if (!failure) {
 					console.log(errorThrown);
 					console.log(textStatus);
 					console.log(jqXHR.responseText);
+					// }
+					if (jqXHR.responseText.includes("sign in"))
+						NEXT_ERROR = 2;
+					// typeof failure === 'function' && failure(jqXHR.responseJSON, textStatus, errorThrown);
+					// return null;
+					resolve();
 				}
-				typeof failure === 'function' && failure(jqXHR.responseJSON, textStatus, errorThrown);
-			}
-		});
-	} catch (e) {
-		//
-	}
-}
-async function getAPI(url, callback, failure = null) {
-	let auth_bear = AUTH["access-token"];
-	let client = AUTH["client"];
-	let uid = AUTH["uid"];
-	await ajax(API_URL + url, callback, failure, "GET", "json", "application/json; charset=utf-8");
-}
-async function postAPI(url, callback) {
-	await $.ajax({
-		url: API_URL + url,
-		method: "POST",
-		crossDomain: true,
-		contentType: "application/json; charset=utf-8",
-		cache: false,
-		/* beforeSend: function (xhr) {
-			xhr.setRequestHeader("Authorization", "Bearer " + token);
-		}, */
-		success: function (r) {
-			typeof callback === 'function' && callback(r);
-		},
-		error: function (jqXHR, textStatus, errorThrown) {
-			console.log(textStatus);
-			console.log(errorThrown);
+			});
+		} catch (e) {
+			//
+			resolve();
 		}
 	});
+	return _r;
+}
+async function getAPI(url) {
+	return await ajax(API_URL + url, "GET", "json", "application/json; charset=utf-8");
+}
+async function postAPI(url) { // currently unused
+	return await ajax(API_URL + url, "POST", "json", "application/json; charset=utf-8");
+	// await $.ajax({
+	// 	url: API_URL + url,
+	// 	method: "POST",
+	// 	// crossDomain: true,
+	// 	contentType: "application/json; charset=utf-8",
+	// 	cache: false,
+	// 	/* beforeSend: function (xhr) {
+	// 		xhr.setRequestHeader("Authorization", "Bearer " + token);
+	// 	}, */
+	// 	success: function (r) {
+	// 		typeof callback === 'function' && callback(r);
+	// 	},
+	// 	error: function (jqXHR, textStatus, errorThrown) {
+	// 		console.log(textStatus);
+	// 		console.log(errorThrown);
+	// 	}
+	// });
+}
+
+function timeAgo(timestamp, locale = 'en') {
+	let value;
+	const diff = (new Date().getTime() - timestamp) / 1000;
+	const minutes = Math.floor(diff / 60);
+	const hours = Math.floor(minutes / 60);
+	const days = Math.floor(hours / 24);
+	const months = Math.floor(days / 30);
+	const years = Math.floor(months / 12);
+	const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+
+	// if (years > 0)
+	// 	return rtf.format(0 - years, "year");
+	// else if (months > 0)
+	// 	return rtf.format(0 - months, "month");
+	// else if (days > 0)
+	// 	return rtf.format(0 - days, "day");
+	// else if (hours > 0)
+	// 	return rtf.format(0 - hours, "hour");
+	// else if (minutes > 0)
+	// 	return rtf.format(0 - minutes, "minute");
+	// else
+	return rtf.format(0 - diff, "second");
 }
 
 var DING = new Audio('audio/ding.ogg');
@@ -125,14 +144,69 @@ function notify(name, type, avatarurl) {
 }
 
 // Piczel data
-var OWNNAME = "";
-var GLOBAL_LIVE_STREAMS = {};
-var FOLLOW_LIST = [];
+var OWNNAME = "";				// required for certain API paths, like multistreams
+var GLOBAL_LIVE_STREAMS = {};	// --DICTIONARY-- site-wide people currently live
+var MY_FOLLOWS = [];			// --ARRAY-- this user's own follow list
 var LIVE_COUNT = 0;
 var INVITES_COUNT = 0;
 var NOTIFICATIONS = 0;
 var NEXT_ERROR = 0;
 
+// API fetches on update --ASYNC-BASED--
+async function fetch_streams() {
+	// followed streams -- requires user being logged in
+	let r = await getAPI('users/me/following');
+	if (r == null)
+		return false;
+	MY_FOLLOWS = getSimpleFollowedList(r);
+
+	// global current live streams
+	let q = await getAPI('streams');
+	if (q == null)
+		return false;
+	GLOBAL_LIVE_STREAMS = getFormattedStreamData(q);
+
+	return true;
+}
+async function fetch_ownname() {
+	if (OWNNAME == "") {
+		log_message("No name set... check storage");
+		
+		let r = await getStorageAsync(["MYNAME"]);
+		if (r["MYNAME"]) {
+			OWNNAME = r["MYNAME"];
+			return true;
+		} else {
+			log_message("No name in cache... fetching!");
+			
+			let r = await getAPI("users/me");
+			if (r == null)
+				return false;
+			OWNNAME = r.username;
+			storage.local.set({"MYNAME" : OWNNAME});
+			log_message("Name set to: " + OWNNAME);
+			return true;
+		}
+	}
+	return true;
+}
+async function fetch_multistream() {
+	let r = await getAPI('streams/' + OWNNAME + '/multi'); // multistream info
+	if (r == null)
+		return false;
+	INVITES_COUNT = 0;
+	for (m in r.received) {
+		if (!r.received[m].accepted)
+			INVITES_COUNT++;
+	}
+	storage.local.set({"MULTISTREAM" : r});
+	return true;
+}
+async function fetch_notifications(callback, failure) { // TODO?
+	return true;
+}
+
+// extension updates --CALLBACK-BASED--
 function updateLive(callback) {
 	
 	LIVE_COUNT = 0;
@@ -140,6 +214,7 @@ function updateLive(callback) {
 	// get the cached list of live users and update accordingly!
 	storage.local.get("LIVE", function(items) {
 		
+		// cached list of followed, live people displayed on the extension from the last update
 		let livecache = items["LIVE"];
 		if (typeof livecache !== typeof {})
 			livecache = {};
@@ -152,21 +227,23 @@ function updateLive(callback) {
 			}
 		}
 		
-		// add the remaining users and dispatch notifications
+		// add any new livestreams and dispatch notifications
 		let cleanData = {};
-		for (i in FOLLOW_LIST) {
-			let username = FOLLOW_LIST[i];
+		let _i = 0;
+		for (i in MY_FOLLOWS) {
+			let username = MY_FOLLOWS[i];
 			if (username in GLOBAL_LIVE_STREAMS) {
 				let formatted = GLOBAL_LIVE_STREAMS[username];
 				if (!(username in livecache)) {
-					log_message(username + " just started streaming!");
+					log_message(username + " just started streaming! (" + timeAgo(formatted.live_since) + ")");
 					notify(username, "live", formatted.avatarurl); // dispatch live notification (or not)
 				}
 				cleanData[username] = formatted;
 			}
+			_i = parseInt(i) + 1;
 		}
 
-		// update live count
+		// update final live count
 		LIVE_COUNT = Object.keys(cleanData).length;
 		if (LIVE_COUNT == 0)
 			log_message("No users streaming.");
@@ -175,62 +252,6 @@ function updateLive(callback) {
 			typeof callback === 'function' && callback();
 		});
 	});
-}
-function updateAPI(callback) { // currently unused
-	
-	storage.local.get(["OAUTH"], (r) => {
-		if (r["OAUTH"]) {
-			API_TOKEN = r["OAUTH"];
-			if (API_TOKEN.indexOf(' ') != -1) {
-				API_TOKEN = API_TOKEN.substr(API_TOKEN.indexOf(' ') + 1);
-				storage.local.set({"OAUTH" : API_TOKEN});
-			}
-			if (IsNullOrWhitespace(API_TOKEN)) {
-				API_TOKEN = "";
-				storage.local.remove("OAUTH");
-			}
-		}
-		if (API_TOKEN) {
-			storage.local.get(["CACHESTAMP"], (s) => {
-				if (s["CACHESTAMP"] && Date.now() < s["CACHESTAMP"] + 15000) {
-					//
-				} else {
-					getAPI("user", function(a) {
-						storage.local.set({"API_USER" : a});
-						storage.local.set({"USERNAME" : a["channel_details"]["name"]});
-					});
-					getAPI("user/notifications", function(c) {
-						if (c)
-							NOTIFICATIONS = c.length;
-						else
-							NOTIFICATIONS = 0;
-						
-						storage.local.set({"API_NOTIFICATIONS" : c});
-						
-						// automatically remove notifications if setting is enabled
-						/* if (settings.picartobar && c && c[0]) {
-							for (n in c) {
-								postAPI("user/notifications/" + c[n]["uuid"] + "/delete");
-							}
-							c = {};
-							storage.local.set({"API_NOTIFICATIONS" : c});
-							notifications = 0;
-						} */
-						
-					});
-				}
-			});
-			getAPI("user/multistream", function(b) {
-				if (b["incoming"])
-					INVITES_COUNT = b["incoming"].length;
-				else
-					INVITES_COUNT = 0;
-				storage.local.set({"API_MULTISTREAM" : b});
-			});
-		}
-		updateBadge();
-	});
-	typeof callback === 'function' && callback();
 }
 function updateBadge(callback) {
 	browser.browserAction.setBadgeBackgroundColor( { color: SETTINGS.badgecolor} );
@@ -323,14 +344,14 @@ function updateMOTD() {
 		storage.sync.set({"MOTD" : version});
 }
 
-// these are the actual functions translating the raw exploreData fields into formatted data
+// these below are the **CORE FUNCTIONS** translating the raw exploreData fields into formatted data!
 function getFormattedStreamData(raw_data) {
 	let formatted_data = {};
 	for (i in raw_data) {
 		let raw = raw_data[i];
 		formatted_data[raw.username] = {
 			"live": raw.live,
-			"live_since" : raw.live_since,
+			"live_since" : Date.parse(raw.live_since),
 			"adult" : raw.adult,
 			"viewers" : raw.viewers,
 			"avatarurl": raw.user.avatar.url
@@ -343,54 +364,6 @@ function getSimpleFollowedList(raw_data) {
 	for (i in raw_data)
 		list.push(raw_data[i].stream_username);
 	return list;
-}
-
-async function fetch_streams(callback) {
-	getAPI('users/me/following', async (r)=> { // followed streams -- requires user being logged in
-		FOLLOW_LIST = getSimpleFollowedList(r);
-		getAPI('streams', async (q)=> { // global current live streams
-			GLOBAL_LIVE_STREAMS = getFormattedStreamData(q);
-
-			// updateCounters(); // even in failure, update counters (set back to empty)
-			typeof callback === 'function' && callback();
-		});
-	});
-}
-function fetch_ownname(callback) {
-	if (OWNNAME == "") {
-		log_message("No name set... check storage");
-		storage.local.get(["MYNAME"], (r) => {
-			if (r["MYNAME"]) {
-				OWNNAME = r["MYNAME"];
-				typeof callback === 'function' && callback();
-			} else {
-				log_message("No name in cache... fetching!");
-				
-				getAPI("users/me", async(r)=>{
-					OWNNAME = r.username;
-					storage.local.set({"MYNAME" : OWNNAME});
-					log_message("Name set to: " + OWNNAME);
-					typeof callback === 'function' && callback();
-				});
-			}
-		});
-	} else {
-		typeof callback === 'function' && callback();
-	}
-}
-function fetch_multistream(callback) {
-	getAPI('streams/' + OWNNAME + '/multi', (r)=> { // multistream info
-		INVITES_COUNT = 0;
-		for (m in r.received) {
-			if (!r.received[m].accepted)
-				INVITES_COUNT++;
-		}
-		storage.local.set({"MULTISTREAM" : r});
-		typeof callback === 'function' && callback();
-	})
-}
-function fetch_notifications(callback) { // TODO?
-	//
 }
 
 // get default settings or fetch from storage
@@ -413,49 +386,27 @@ function initSettings(callback) {
 // main update function
 var UPDATER = null;
 async function update() {
-	
-	// fetch auth data from cookies, use that to get live streams info
-	await new Promise((resolve) => {
-		getCookies(["https://piczel.tv", "http://piczel.tv", "https://www.piczel.tv", "http://www.piczel.tv"], "authHeaders",
-			function(a) { // success
-				let b = decodeURIComponent(a);
-				let c = JSON.parse(b);
-				
-				storage.sync.set({"OAUTH" : c}, function() {
-					AUTH = c;
 
-					// fetch piczel data
-					fetch_streams(() => {
-						fetch_ownname(() => {
-							fetch_multistream(() => {
-								fetch_notifications();
-								resolve();
-							});
-						});
-					});
-				});
-			},
-			function() { // failure
-				log_message("No auth field found... Not logged in?!");
-				NEXT_ERROR = 2;
-				FOLLOW_LIST = [];
-				resolve();
-			}
-		);
-	})
+	// fetch piczel data
+	if (await fetch_streams())
+		if (await fetch_ownname())
+			if (await fetch_multistream())
+				if (await fetch_notifications()) { // does nothing atm.
+					// ...
+				}
 	
 	// update badge and live count without fetching from Piczel...
 	updateLive(() => {
-		/* updateAPI(() => { */
-			updateBadge(() => {
-				updateMOTD(); // done!
-
-				storage.local.set({"ERROR" : NEXT_ERROR});
-				NEXT_ERROR = 0;
-				UPDATER = setTimeout(update, SETTINGS.updateinterval * 1000);
+		updateBadge(() => {
+			updateMOTD(() => {
+				// ...
 			});
-		/* }); */
+		});
 	});
+				
+	storage.local.set({"ERROR" : NEXT_ERROR});
+	NEXT_ERROR = 0;
+	UPDATER = setTimeout(update, SETTINGS.updateinterval * 1000);
 }
 function startup() {
 	storage.sync.get(["SETTINGS"], (r) => {
@@ -514,7 +465,7 @@ browser.runtime.onMessage.addListener(function(request, sender, sendResponse) {
 			LIVE_COUNT = 0;
 			INVITES_COUNT = 0;
 			OWNNAME = "";
-			FOLLOW_LIST = [];
+			MY_FOLLOWS = [];
 			API_TOKEN = "";
 			restart();
 			break;
